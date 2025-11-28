@@ -1,0 +1,133 @@
+/* Global Styles */
+body {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Cards */
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Navbar */
+.navbar-brand i {
+    color: #f7931a;  /* Bitcoin orange */
+    margin-right: 8px;
+}
+
+/* Forms */
+.form-control:focus {
+    border-color: #f7931a;
+    box-shadow: 0 0 0 0.2rem rgba(247, 147, 26, 0.25);
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: #f7931a;
+    border-color: #f7931a;
+}
+
+.btn-primary:hover {
+    background-color: #e88a18;
+    border-color: #e88a18;
+}
+
+/* Loading Spinner */
+.spinner-border {
+    color: #f7931a !important;
+}
+
+/* Results Tables */
+.table thead th {
+    border-top: none;
+    border-bottom: 2px solid #f7931a;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(247, 147, 26, 0.05);
+}
+
+/* Status Badges */
+.badge-weak {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-secure {
+    background-color: #28a745;
+    color: white;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 20px;
+    }
+    
+    .table-responsive {
+        margin-bottom: 0;
+    }
+}
+
+/* Custom Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* Bitcoin Theme Elements */
+.bitcoin-icon {
+    color: #f7931a;
+}
+
+.jumbotron {
+    background: linear-gradient(135deg, #f7931a 0%, #ffd700 100%);
+    color: white;
+    padding: 4rem 2rem;
+    border-radius: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Results Sections */
+.results-summary {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+}
+
+.weak-signature-item {
+    border-left: 4px solid #dc3545;
+    padding-left: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Loading States */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}

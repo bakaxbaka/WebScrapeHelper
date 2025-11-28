@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="jumbotron text-center">
+    <h1 class="display-4">Bitcoin Signature Analyzer</h1>
+    <p class="lead">Analyze Bitcoin transactions and addresses for weak signatures and private key recovery</p>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-exchange-alt"></i> Transaction Analysis
+                </h5>
+                <p class="card-text">
+                    Analyze individual Bitcoin transactions for signature weaknesses and potential private key recovery.
+                </p>
+                <a href="{{ url_for('transaction') }}" class="btn btn-primary">Analyze Transaction</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-wallet"></i> Address Analysis
+                </h5>
+                <p class="card-text">
+                    Scan Bitcoin addresses for transactions with weak signatures and find related addresses.
+                </p>
+                <a href="{{ url_for('address') }}" class="btn btn-primary">Analyze Address</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Known Vulnerable Addresses</h5>
+                <div class="table-responsive">
+                    <table class="table" id="known-addresses">
+                        <thead>
+                            <tr>
+                                <th>Address</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Vulnerability Search Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-satellite-dish"></i> Live Vulnerability Search</h3>
+            </div>
+            <div class="card-body">
+                <p>Monitor Bitcoin blockchain and mempool for transactions with weak ECDSA signatures in real-time.</p>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <button class="btn btn-warning btn-lg w-100 mb-3" id="scan-recent-btn">
+                            <i class="fas fa-search"></i> Scan Recent Blocks
+                        </button>
+                        <p class="text-muted">Scan the latest Bitcoin block for vulnerable signatures</p>
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-danger btn-lg w-100 mb-3" id="monitor-mempool-btn">
+                            <i class="fas fa-broadcast-tower"></i> Monitor Mempool
+                        </button>
+                        <p class="text-muted">Monitor unconfirmed transactions for weak signatures</p>
+                    </div>
+                </div>
+
+                <div id="live-scan-loading" class="text-center d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Scanning...</span>
+                    </div>
+                    <p>Scanning for vulnerable signatures...</p>
+                </div>
+
+                <div id="live-scan-results" class="mt-4 d-none">
+                    <h5>Scan Results</h5>
+                    <div id="scan-summary" class="alert alert-info"></div>
+                    <div id="vulnerable-transactions"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

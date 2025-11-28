@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-wallet"></i> Address Analysis</h2>
+        <p>Enter a Bitcoin address to analyze its transactions for signature weaknesses.</p>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form id="address-analysis-form">
+                    <div class="mb-3">
+                        <label for="btc-address" class="form-label">Bitcoin Address</label>
+                        <input type="text" class="form-control" id="btc-address" 
+                               placeholder="Enter Bitcoin address" required>
+                        <div class="invalid-feedback">
+                            Please enter a valid Bitcoin address
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Analyze
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div id="address-loading" class="text-center d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Analyzing address transactions...</p>
+        </div>
+
+        <div id="address-results" class="d-none">
+            <h3>Analysis Results</h3>
+            <div class="card">
+                <div class="card-body">
+                    <div class="results-summary">
+                        <p><strong>Address:</strong> <span id="result-address"></span></p>
+                        <p><strong>Transactions Analyzed:</strong> <span id="result-txs"></span></p>
+                        <p><strong>Weak Signatures Found:</strong> <span id="result-weak"></span></p>
+                    </div>
+
+                    <div class="mt-4">
+                        <h4>Weak Signatures</h4>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Transaction</th>
+                                        <th>Type</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="address-weak-sigs">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h4>Related Addresses</h4>
+                        <div id="related-addresses">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="address-error" class="alert alert-danger d-none">
+        </div>
+    </div>
+</div>
+{% endblock %}

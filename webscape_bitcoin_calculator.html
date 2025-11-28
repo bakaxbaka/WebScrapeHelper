@@ -1,0 +1,970 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin ECDSA Calculator - Offline Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        h1, h2, h3 {
+            color: #1a73e8;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        td {
+            padding: 8px;
+            vertical-align: middle;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        button:hover {
+            background-color: #1557b0;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .result {
+            font-family: monospace;
+            font-weight: bold;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-all;
+        }
+        .description {
+            background-color: #e9f5ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .description ul {
+            padding-left: 25px;
+        }
+        #nav {
+            position: sticky;
+            top: 0;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            z-index: 100;
+        }
+        #nav ul {
+            list-style-type: none;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 0;
+        }
+        #nav li {
+            margin: 0;
+        }
+        #nav a {
+            text-decoration: none;
+            color: #1a73e8;
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        #nav a:hover {
+            background-color: #e9f5ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bitcoin ECDSA Calculator - Offline Version</h1>
+    
+    <div id="nav">
+        <ul>
+            <li><a href="#intro">Introduction</a></li>
+            <li><a href="#crack2">Crack Key (Secret Reuse)</a></li>
+            <li><a href="#crack1">Crack Key (Known Secret)</a></li>
+            <li><a href="#calcpub">Calculate Public Key</a></li>
+            <li><a href="#calcsig">Sign Message</a></li>
+            <li><a href="#verify">Verify Signature</a></li>
+            <li><a href="#findk">Find Signing Secret</a></li>
+            <li><a href="#findpub">Find Public Key</a></li>
+            <li><a href="#validate">Validate Point</a></li>
+        </ul>
+    </div>
+
+    <div id="intro" class="description">
+        <p>This offline tool provides various Bitcoin elliptic curve calculations. All operations are performed locally in your browser.</p>
+        <p>In these calculations the following parameters are used:</p>
+        <ul>
+            <li><strong>p</strong> - the curve base prime field, used for coordinate calculations</li>
+            <li><strong>G</strong> - the fixed generator point</li>
+            <li><strong>n</strong> - the curve group order, total number of points</li>
+            <li><strong>x</strong> - the secret key, a value between 0 and the group order</li>
+            <li><strong>k</strong> - the signing secret, a value between 0 and the group order</li>
+            <li><strong>px, py</strong> - the coordinates of the public key point</li>
+            <li><strong>r</strong> - the first part of the signature, a value between 0 and the coordinate order</li>
+            <li><strong>s</strong> - the second part of the signature, a value between 0 and the group order</li>
+            <li><strong>m</strong> - the message (transaction hash)</li>
+            <li><strong>Y</strong> - the public key</li>
+        </ul>
+        <p>Note: In Bitcoin, the message is the hash of the prepared transaction.<br>
+        Also note that in Bitcoin the s value is required to be between 0 and half the group order.</p>
+    </div>
+
+    <div id="crack2" class="card">
+        <h2>Example, cracking a key using secret-reuse</h2>
+        <p>When a signing secret was used to sign two different messages, you can recover the signing secret with this 
+        calculation: <pre>k = (m1-m2)/(s1-s2) mod n</pre>
+        And then calculate x in the same way as in the next example.</p>
+        <table>
+            <tr>
+                <td>r: <input size="64" id="crack2_r"></td>
+                <td>
+                    <button onclick="do_crack2()">Do Crack</button>
+                    <button onclick="load_crack2()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>m1: <input size="64" id="crack2_m1"></td>
+                <td>s1: <input size="64" id="crack2_s1"></td>
+            </tr>
+            <tr>
+                <td>m2: <input size="64" id="crack2_m2"></td>
+                <td>s2: <input size="64" id="crack2_s2"></td>
+            </tr>
+            <tr>
+                <td>k: <span id="crack2_k" class="result"></span></td>
+                <td>x: <span id="crack2_x" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="crack1" class="card">
+        <h2>Example, cracking a key using known secret</h2>
+        <p>When you have cracked or otherwise guessed a signing secret for a signature, the private key
+        is calculated like this:
+        <pre>x = (s*k-m)/r mod n</pre></p>
+        <table>
+            <tr>
+                <td>r: <input size="64" id="crack1_r"></td>
+                <td>
+                    <button onclick="do_crack1()">Do Crack</button>
+                    <button onclick="load_crack1()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>s: <input size="64" id="crack1_s"></td>
+                <td>m: <input size="64" id="crack1_m"></td>
+            </tr>
+            <tr>
+                <td>k: <input size="64" id="crack1_k"></td>
+                <td>x: <span id="crack1_x" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="calcpub" class="card">
+        <h2>Example, calculate a public key</h2>
+        <p>Given the private key, you can calculate the public key like this:
+        <pre>Y = G * x</pre></p>
+        <table>
+            <tr>
+                <td>x: <input size="64" id="calcpub_x"></td>
+                <td>
+                    <button onclick="do_calcpub()">Calc pub</button>
+                    <button onclick="load_calcpub()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>px: <span id="calcpub_px" class="result"></span></td>
+                <td>py: <span id="calcpub_py" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="calcsig" class="card">
+        <h2>Example, sign a message with a secret key</h2>
+        <p>A ECDSA signature is calculated like this:
+        <pre>r = xcoord(G*k) mod n
+s = (m + x*r)/k mod n</pre></p>
+        <table>
+            <tr>
+                <td>k: <input size="64" id="calcsig_k"></td>
+                <td>
+                    <button onclick="do_calcsig()">Calc sig</button>
+                    <button onclick="load_calcsig()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>x: <input size="64" id="calcsig_x"></td>
+                <td>m: <input size="64" id="calcsig_m"></td>
+            </tr>
+            <tr>
+                <td>r: <span id="calcsig_r" class="result"></span></td>
+                <td>s: <span id="calcsig_s" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="verify" class="card">
+        <h2>Example, verify signature</h2>
+        <p>A signature is verified with this calculation:
+        <pre>u1 = m/s mod n
+u2 = r/s mod n
+R = G*u1 + P*u2 (where P is the public key)
+signature is valid if xcoord(R) mod n == r</pre></p>
+        <table>
+            <tr>
+                <td>r: <input size="64" id="verify_r"></td>
+                <td>
+                    <button onclick="do_verify()">Verify</button>
+                    <button onclick="load_verify()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>s: <input size="64" id="verify_s"></td>
+                <td>m: <input size="64" id="verify_m"></td>
+            </tr>
+            <tr>
+                <td>px: <input size="64" id="verify_px"></td>
+                <td>py: <input size="64" id="verify_py"></td>
+            </tr>
+            <tr>
+                <td>Result: <span id="verify_result" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="findk" class="card">
+        <h2>Example, find a signing secret</h2>
+        <p>Given a known private key and signature, find the signing secret:
+        <pre>k = (m + x*r)/s mod n</pre></p>
+        <table>
+            <tr>
+                <td>r: <input size="64" id="findk_r"></td>
+                <td>
+                    <button onclick="do_findk()">Find k</button>
+                    <button onclick="load_findk()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>s: <input size="64" id="findk_s"></td>
+                <td>m: <input size="64" id="findk_m"></td>
+            </tr>
+            <tr>
+                <td>x: <input size="64" id="findk_x"></td>
+                <td>k: <span id="findk_k" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="findpub" class="card">
+        <h2>Example, find the public key</h2>
+        <p>Given a signature and message, you can recover the possible public keys:
+        <pre>Y = (R*s - G*m)/r</pre></p>
+        <table>
+            <tr>
+                <td>r: <input size="64" id="findpub_r"></td>
+                <td>
+                    <button onclick="do_findpub()">Find pub</button>
+                    <button onclick="load_findpub()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>s: <input size="64" id="findpub_s"></td>
+                <td>m: <input size="64" id="findpub_m"></td>
+            </tr>
+            <tr>
+                <td>px: <span id="findpub_px" class="result"></span></td>
+                <td>py: <span id="findpub_py" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div id="validate" class="card">
+        <h2>Example, validate a point</h2>
+        <p>To check if a point is on the curve, verify:
+        <pre>y² = x³ + 7 mod p</pre></p>
+        <table>
+            <tr>
+                <td>
+                    <button onclick="do_validatexy()">Validate</button>
+                    <button onclick="load_validatexy()">Load example</button>
+                </td>
+                <td>Result: <span id="validatexy_result" class="result"></span></td>
+            </tr>
+            <tr>
+                <td>x: <input size="64" id="validatexy_px"></td>
+                <td>y: <input size="64" id="validatexy_py"></td>
+            </tr>
+        </table>
+    </div>
+
+    <script>
+        // Bitcoin elliptic curve implementation
+        const B = (function() {
+            // BigInt operations
+            const bignum = {
+                // Add two BigInts
+                add: (a, b) => BigInt(a) + BigInt(b),
+                
+                // Subtract two BigInts
+                sub: (a, b) => BigInt(a) - BigInt(b),
+                
+                // Multiply two BigInts
+                mul: (a, b) => BigInt(a) * BigInt(b),
+                
+                // Integer division of two BigInts
+                div: (a, b) => BigInt(a) / BigInt(b),
+                
+                // Modulo operation
+                mod: (a, n) => {
+                    let result = BigInt(a) % BigInt(n);
+                    if (result < 0n) result += BigInt(n);
+                    return result;
+                },
+                
+                // Modular inverse using Fermat's little theorem (for prime modulus)
+                modInverse: (a, n) => {
+                    a = bignum.mod(a, n);
+                    if (a === 0n) throw new Error("Modular inverse of 0 doesn't exist");
+                    return bignum.modPow(a, bignum.sub(n, 2n), n);
+                },
+                
+                // Modular exponentiation
+                modPow: (base, exponent, modulus) => {
+                    if (modulus === 1n) return 0n;
+                    
+                    base = bignum.mod(base, modulus);
+                    if (base === 0n) return 0n;
+                    if (exponent === 0n) return 1n;
+                    
+                    let result = 1n;
+                    while (exponent > 0n) {
+                        if (exponent % 2n === 1n) {
+                            result = bignum.mod(result * base, modulus);
+                        }
+                        exponent = exponent / 2n;
+                        base = bignum.mod(base * base, modulus);
+                    }
+                    return result;
+                }
+            };
+
+            // Galois Field for prime p
+            const gfp = (p) => {
+                return {
+                    p: p,
+                    add: (a, b) => bignum.mod(bignum.add(a, b), p),
+                    sub: (a, b) => bignum.mod(bignum.sub(a, b), p),
+                    mul: (a, b) => bignum.mod(bignum.mul(a, b), p),
+                    div: (a, b) => bignum.mod(bignum.mul(a, bignum.modInverse(b, p)), p),
+                    neg: (a) => bignum.mod(-BigInt(a), p),
+                    eq: (a, b) => bignum.mod(a, p) === bignum.mod(b, p),
+                    pow: (a, n) => bignum.modPow(a, n, p),
+                    sqrt: (a) => {
+                        // Tonelli-Shanks algorithm for p ≡ 3 (mod 4)
+                        // In this case, sqrt(a) = a^((p+1)/4) mod p
+                        a = bignum.mod(a, p);
+                        if (a === 0n) return 0n;
+                        
+                        // For secp256k1, p ≡ 3 (mod 4)
+                        if (p % 4n === 3n) {
+                            const r = bignum.modPow(a, (p + 1n) / 4n, p);
+                            return r;
+                        }
+                        
+                        throw new Error("Not implemented for this prime");
+                    }
+                };
+            };
+
+            // Elliptic curve implementation
+            const ec = (field, a, b) => {
+                const Point = function(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.infinity = false;
+                };
+                
+                const PointInfinity = function() {
+                    this.infinity = true;
+                };
+                
+                // Check if point is on curve
+                const isoncurve = (p) => {
+                    if (p.infinity) return true;
+                    
+                    // y² = x³ + ax + b
+                    const lhs = field.mul(p.y, p.y);
+                    const x_squared = field.mul(p.x, p.x);
+                    const x_cubed = field.mul(x_squared, p.x);
+                    const ax = field.mul(a, p.x);
+                    const rhs = field.add(field.add(x_cubed, ax), b);
+                    
+                    return field.eq(lhs, rhs);
+                };
+                
+                // Point addition
+                const add = (p1, p2) => {
+                    if (p1.infinity) return p2;
+                    if (p2.infinity) return p1;
+                    
+                    if (field.eq(p1.x, p2.x)) {
+                        if (field.eq(p1.y, p2.y)) {
+                            return double(p1);
+                        } else {
+                            return new PointInfinity();
+                        }
+                    }
+                    
+                    // Calculate slope
+                    const slope = field.div(
+                        field.sub(p2.y, p1.y),
+                        field.sub(p2.x, p1.x)
+                    );
+                    
+                    // Calculate new point
+                    const x3 = field.sub(
+                        field.sub(field.mul(slope, slope), p1.x),
+                        p2.x
+                    );
+                    
+                    const y3 = field.sub(
+                        field.mul(slope, field.sub(p1.x, x3)),
+                        p1.y
+                    );
+                    
+                    return new Point(x3, y3);
+                };
+                
+                // Point doubling
+                const double = (p) => {
+                    if (p.infinity) return p;
+                    if (field.eq(p.y, 0n)) return new PointInfinity();
+                    
+                    // Calculate slope
+                    const slope = field.div(
+                        field.add(
+                            field.mul(3n, field.mul(p.x, p.x)),
+                            a
+                        ),
+                        field.mul(2n, p.y)
+                    );
+                    
+                    // Calculate new point
+                    const x3 = field.sub(
+                        field.mul(slope, slope),
+                        field.mul(2n, p.x)
+                    );
+                    
+                    const y3 = field.sub(
+                        field.mul(slope, field.sub(p.x, x3)),
+                        p.y
+                    );
+                    
+                    return new Point(x3, y3);
+                };
+                
+                // Scalar multiplication
+                const mul = (p, n) => {
+                    if (p.infinity) return p;
+                    if (n === 0n) return new PointInfinity();
+                    
+                    n = BigInt(n);
+                    let result = new PointInfinity();
+                    let addend = p;
+                    
+                    while (n > 0n) {
+                        if (n & 1n) {
+                            result = add(result, addend);
+                        }
+                        addend = double(addend);
+                        n = n >> 1n;
+                    }
+                    
+                    return result;
+                };
+                
+                // Create a point from x coordinate and y-bit
+                const decompress = (x, ybit) => {
+                    // Calculate y² = x³ + ax + b
+                    const x_squared = field.mul(x, x);
+                    const x_cubed = field.mul(x_squared, x);
+                    const ax = field.mul(a, x);
+                    const y_squared = field.add(field.add(x_cubed, ax), b);
+                    
+                    // Calculate square root of y²
+                    const y = field.sqrt(y_squared);
+                    
+                    // Determine correct y value based on bit
+                    let result_y = y;
+                    if ((y % 2n) !== BigInt(ybit)) {
+                        result_y = field.neg(y);
+                    }
+                    
+                    return new Point(x, result_y);
+                };
+                
+                // Create a field element from a number or hex string
+                const coord = (x) => {
+                    if (typeof x === 'string') {
+                        if (x.startsWith('0x')) {
+                            return BigInt(x);
+                        } else {
+                            return BigInt('0x' + x);
+                        }
+                    }
+                    return BigInt(x);
+                };
+                
+                return {
+                    field,
+                    a, b,
+                    Point,
+                    PointInfinity,
+                    isoncurve,
+                    add,
+                    double,
+                    mul,
+                    decompress,
+                    coord
+                };
+            };
+
+            // ECDSA implementation
+            const ecdsa = (curve, G, n) => {
+                // Sign a message
+                const sign = (message, privateKey, k) => {
+                    const R = curve.mul(G, k);
+                    if (R.infinity) {
+                        throw new Error("R is at infinity");
+                    }
+                    
+                    const r = bignum.mod(R.x, n);
+                    if (r === 0n) {
+                        throw new Error("r is zero");
+                    }
+                    
+                    const s = bignum.mod(
+                        bignum.mul(
+                            bignum.modInverse(k, n),
+                            bignum.mod(
+                                bignum.add(
+                                    message,
+                                    bignum.mul(privateKey, r)
+                                ),
+                                n
+                            )
+                        ),
+                        n
+                    );
+                    
+                    if (s === 0n) {
+                        throw new Error("s is zero");
+                    }
+                    
+                    return { r, s };
+                };
+                
+                // Verify a signature
+                const verify = (message, signature, publicKey) => {
+                    const { r, s } = signature;
+                    
+                    // Check r, s are in range [1, n-1]
+                    if (r <= 0n || r >= n || s <= 0n || s >= n) {
+                        return false;
+                    }
+                    
+                    const sInv = bignum.modInverse(s, n);
+                    const u1 = bignum.mod(bignum.mul(message, sInv), n);
+                    const u2 = bignum.mod(bignum.mul(r, sInv), n);
+                    
+                    const R = curve.add(
+                        curve.mul(G, u1),
+                        curve.mul(publicKey, u2)
+                    );
+                    
+                    if (R.infinity) {
+                        return false;
+                    }
+                    
+                    const v = bignum.mod(R.x, n);
+                    return v === r;
+                };
+                
+                // Recover private key from signature and nonce
+                const recoverPrivate = (message, signature, k) => {
+                    const { r, s } = signature;
+                    
+                    // x = (s*k - message) / r mod n
+                    return bignum.mod(
+                        bignum.mul(
+                            bignum.modInverse(r, n),
+                            bignum.mod(
+                                bignum.sub(
+                                    bignum.mul(s, k),
+                                    message
+                                ),
+                                n
+                            )
+                        ),
+                        n
+                    );
+                };
+                
+                // Recover nonce from signature and private key
+                const recoverNonce = (message, signature, privateKey) => {
+                    const { r, s } = signature;
+                    
+                    // k = (message + x*r) / s mod n
+                    return bignum.mod(
+                        bignum.mul(
+                            bignum.modInverse(s, n),
+                            bignum.mod(
+                                bignum.add(
+                                    message,
+                                    bignum.mul(privateKey, r)
+                                ),
+                                n
+                            )
+                        ),
+                        n
+                    );
+                };
+                
+                // Recover nonce from two signatures with same k
+                const recoverNonceFromSigPair = (message1, signature1, message2, signature2) => {
+                    const { s: s1 } = signature1;
+                    const { s: s2 } = signature2;
+                    
+                    const sSubtract = bignum.mod(bignum.sub(s1, s2), n);
+                    if (sSubtract === 0n) {
+                        throw new Error("s values are identical");
+                    }
+                    
+                    const mSubtract = bignum.mod(bignum.sub(message1, message2), n);
+                    
+                    // k = (message1 - message2) / (s1 - s2) mod n
+                    return bignum.mod(
+                        bignum.mul(
+                            mSubtract,
+                            bignum.modInverse(sSubtract, n)
+                        ),
+                        n
+                    );
+                };
+                
+                // Recover public key options from signature
+                const recoverPublicKey = (message, signature) => {
+                    const { r, s } = signature;
+                    
+                    // Find point R such that x = r
+                    const R1 = curve.decompress(r, 0);
+                    const R2 = curve.decompress(r, 1);
+                    
+                    // Calculate sR
+                    const sR1 = curve.mul(R1, s);
+                    const sR2 = curve.mul(R2, s);
+                    
+                    // Calculate mG
+                    const mG = curve.mul(G, message);
+                    
+                    // Calculate public key as (sR - mG) / r
+                    const rInv = bignum.modInverse(r, n);
+                    
+                    const Y1 = curve.mul(
+                        curve.add(sR1, curve.mul(mG, n - 1n)),
+                        rInv
+                    );
+                    
+                    const Y2 = curve.mul(
+                        curve.add(sR2, curve.mul(mG, n - 1n)),
+                        rInv
+                    );
+                    
+                    return [Y1, Y2];
+                };
+                
+                return {
+                    sign,
+                    verify,
+                    recoverPrivate,
+                    recoverNonce,
+                    recoverNonceFromSigPair,
+                    recoverPublicKey
+                };
+            };
+
+            // Bitcoin curve parameters
+            const p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+            const a = 0n;
+            const b = 7n;
+            const n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+            const Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+            const Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+            
+            // Initialize objects
+            const field = gfp(p);
+            const curve = ec(field, a, b);
+            const G = new curve.Point(Gx, Gy);
+            const bitcoin = ecdsa(curve, G, n);
+            
+            // Return the Bitcoin curve environment
+            return {
+                p, a, b, n, G,
+                bignum,
+                field,
+                ec: curve,
+                ecdsa: bitcoin
+            };
+        })();
+
+        // Example data for loading
+        const example = {
+            r: "a6e3c57dd01abe90086ce5af11ced6bfc5c6f69e9c92c18ef53c82862bfb5e8f",
+            s: "5a259e3c979c8cf2b1f5d5796999ae00a1f539837bda2d3a3705bc051066e365",
+            m: "8182a168b189ad2d5786e07dce0da1b9795c2eb31e4d8c89f12f69fbb3e8ff77",
+            k: "76399385e5d5591b72a3b49ca107ac08fe8b664a3d172ce978af006d348ca418",
+            x: "1111111111111111111111111111111111111111111111111111111111111111",
+            px: "4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa",
+            py: "385b6b1b8ead809ca67454d9683fcf2ba88d8e2d0c73b6e0e1575073ce993497"
+        };
+
+        // Utility functions
+        function getnumber(id) {
+            const value = document.getElementById(id).value.trim();
+            if (value === "") {
+                throw new Error(`${id} is empty`);
+            }
+            try {
+                return B.ec.coord(value);
+            } catch (e) {
+                throw new Error(`Error parsing ${id}: ${e.message}`);
+            }
+        }
+
+        function setvalue(id, value) {
+            document.getElementById(id).innerText = value;
+        }
+
+        // Function implementations
+        function do_crack2() {
+            try {
+                const r = getnumber("crack2_r");
+                const m1 = getnumber("crack2_m1");
+                const s1 = getnumber("crack2_s1");
+                const m2 = getnumber("crack2_m2");
+                const s2 = getnumber("crack2_s2");
+
+                const k = B.ecdsa.recoverNonceFromSigPair(m1, { r, s: s1 }, m2, { r, s: s2 });
+                const x = B.ecdsa.recoverPrivate(m1, { r, s: s1 }, k);
+
+                setvalue("crack2_k", k.toString(16));
+                setvalue("crack2_x", x.toString(16));
+            } catch (e) {
+                console.error("Error in do_crack2:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_crack2() {
+            document.getElementById("crack2_r").value = example.r;
+            document.getElementById("crack2_m1").value = example.m;
+            document.getElementById("crack2_s1").value = example.s;
+            document.getElementById("crack2_m2").value = "ec208baa0fc1c19f708a9ca96fdeff3ac3f230bb4a7ba4aede4942ad003c0f60";
+            document.getElementById("crack2_s2").value = "2b698a0f0a4041b77e63488ad48c23e8e8838dd1fb7520408b121697b782ef22";
+        }
+
+        function do_crack1() {
+            try {
+                const r = getnumber("crack1_r");
+                const s = getnumber("crack1_s");
+                const m = getnumber("crack1_m");
+                const k = getnumber("crack1_k");
+
+                const x = B.ecdsa.recoverPrivate(m, { r, s }, k);
+                setvalue("crack1_x", x.toString(16));
+            } catch (e) {
+                console.error("Error in do_crack1:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_crack1() {
+            document.getElementById("crack1_r").value = example.r;
+            document.getElementById("crack1_s").value = example.s;
+            document.getElementById("crack1_m").value = example.m;
+            document.getElementById("crack1_k").value = example.k;
+        }
+
+        function do_calcpub() {
+            try {
+                const x = getnumber("calcpub_x");
+                const Y = B.ec.mul(B.G, x);
+
+                setvalue("calcpub_px", Y.x.toString(16));
+                setvalue("calcpub_py", Y.y.toString(16));
+            } catch (e) {
+                console.error("Error in do_calcpub:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_calcpub() {
+            document.getElementById("calcpub_x").value = example.x;
+        }
+
+        function do_calcsig() {
+            try {
+                const k = getnumber("calcsig_k");
+                const x = getnumber("calcsig_x");
+                const m = getnumber("calcsig_m");
+
+                const { r, s } = B.ecdsa.sign(m, x, k);
+                setvalue("calcsig_r", r.toString(16));
+                setvalue("calcsig_s", s.toString(16));
+            } catch (e) {
+                console.error("Error in do_calcsig:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_calcsig() {
+            document.getElementById("calcsig_k").value = example.k;
+            document.getElementById("calcsig_x").value = example.x;
+            document.getElementById("calcsig_m").value = example.m;
+        }
+
+        function do_verify() {
+            try {
+                const r = getnumber("verify_r");
+                const s = getnumber("verify_s");
+                const m = getnumber("verify_m");
+                const px = getnumber("verify_px");
+                const py = getnumber("verify_py");
+
+                const publicKey = new B.ec.Point(px, py);
+                const isValid = B.ecdsa.verify(m, { r, s }, publicKey);
+
+                setvalue("verify_result", isValid ? "Valid signature" : "Invalid signature");
+            } catch (e) {
+                console.error("Error in do_verify:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_verify() {
+            document.getElementById("verify_r").value = example.r;
+            document.getElementById("verify_s").value = example.s;
+            document.getElementById("verify_m").value = example.m;
+            document.getElementById("verify_px").value = example.px;
+            document.getElementById("verify_py").value = example.py;
+        }
+
+        function do_findk() {
+            try {
+                const r = getnumber("findk_r");
+                const s = getnumber("findk_s");
+                const m = getnumber("findk_m");
+                const x = getnumber("findk_x");
+
+                const k = B.ecdsa.recoverNonce(m, { r, s }, x);
+                setvalue("findk_k", k.toString(16));
+            } catch (e) {
+                console.error("Error in do_findk:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_findk() {
+            document.getElementById("findk_r").value = example.r;
+            document.getElementById("findk_s").value = example.s;
+            document.getElementById("findk_m").value = example.m;
+            document.getElementById("findk_x").value = example.x;
+        }
+
+        function do_findpub() {
+            try {
+                const r = getnumber("findpub_r");
+                const s = getnumber("findpub_s");
+                const m = getnumber("findpub_m");
+
+                const publicKeys = B.ecdsa.recoverPublicKey(m, { r, s });
+                setvalue("findpub_px", publicKeys[0].x.toString(16));
+                setvalue("findpub_py", publicKeys[0].y.toString(16));
+            } catch (e) {
+                console.error("Error in do_findpub:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_findpub() {
+            document.getElementById("findpub_r").value = example.r;
+            document.getElementById("findpub_s").value = example.s;
+            document.getElementById("findpub_m").value = example.m;
+        }
+
+        function do_validatexy() {
+            try {
+                const px = getnumber("validatexy_px");
+                const py = getnumber("validatexy_py");
+
+                const point = new B.ec.Point(px, py);
+                const isValid = B.ec.isoncurve(point);
+
+                setvalue("validatexy_result", isValid ? "Point is on curve" : "Point is NOT on curve");
+            } catch (e) {
+                console.error("Error in do_validatexy:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_validatexy() {
+            document.getElementById("validatexy_px").value = example.px;
+            document.getElementById("validatexy_py").value = example.py;
+        }
+    </script>
+</body>
+</html>

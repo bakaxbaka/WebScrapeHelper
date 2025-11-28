@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-key"></i> Advanced ECDSA Analysis</h2>
+        <p>Advanced cryptographic analysis and key recovery from weak ECDSA signatures.</p>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h4>Transaction Input</h4>
+            </div>
+            <div class="card-body">
+                <form id="ecdsa-analysis-form">
+                    <div class="mb-3">
+                        <label class="form-label">Transaction ID</label>
+                        <input type="text" class="form-control" id="tx-id" required>
+                        <div class="form-text">Enter a Bitcoin transaction ID to analyze its signatures.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-calculator"></i> Analyze Transaction
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div id="analysis-loading" class="text-center d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Analyzing...</span>
+            </div>
+            <p>Performing cryptographic calculations...</p>
+        </div>
+
+        <div id="analysis-results" class="d-none">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>ECDSA Parameters</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5>Curve Parameters (secp256k1)</h5>
+                        <p><strong>p (Field Order):</strong> <span id="param-p" class="text-monospace"></span></p>
+                        <p><strong>n (Group Order):</strong> <span id="param-n" class="text-monospace"></span></p>
+                        <p><strong>G (Generator Point):</strong></p>
+                        <p class="ms-3">Gx: <span id="param-gx" class="text-monospace"></span></p>
+                        <p class="ms-3">Gy: <span id="param-gy" class="text-monospace"></span></p>
+                    </div>
+
+                    <div class="alert alert-success">
+                        <h5>Signature Data</h5>
+                        <div id="signatures">
+                            <!-- Signature data will be dynamically added here -->
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <h5>Verification</h5>
+                        <p><strong>ECDSA Signature Verification:</strong> <span id="verify-result"></span></p>
+                        <p><strong>Point Validation:</strong> <span id="point-valid"></span></p>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <h5>Parameter Verification</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Signing Secret (k) Verification</label>
+                            <div class="row">
+                                <div class="col-md-5">
+                                    <input type="text" class="form-control mb-2" id="verify-m1" placeholder="Message Hash 1 (m1)">
+                                    <input type="text" class="form-control mb-2" id="verify-s1" placeholder="Signature s1">
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="text" class="form-control mb-2" id="verify-m2" placeholder="Message Hash 2 (m2)">
+                                    <input type="text" class="form-control mb-2" id="verify-s2" placeholder="Signature s2">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-primary" id="verify-k-btn">Verify k</button>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <p><strong>Calculated k:</strong> <span id="calculated-k" class="text-monospace"></span></p>
+                                <small class="text-muted">Formula: k = (m1-m2)/(s1-s2) mod n</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Private Key (x) Verification</label>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control mb-2" id="verify-r" placeholder="Signature r">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control mb-2" id="verify-s" placeholder="Signature s">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control mb-2" id="verify-m" placeholder="Message Hash">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control mb-2" id="verify-k" placeholder="Signing Secret (k)">
+                                    <button class="btn btn-primary" id="verify-x-btn">Verify x</button>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <p><strong>Calculated x:</strong> <span id="calculated-x" class="text-monospace"></span></p>
+                                <small class="text-muted">Formula: x = (s*k-m)/r mod n</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Public Key Verification</label>
+                            <div class="row">
+                                <div class="col-md-9">
+                                    <input type="text" class="form-control mb-2" id="verify-private-key" placeholder="Private Key (x)">
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-primary" id="verify-pubkey-btn">Calculate Y</button>
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <p><strong>Calculated Public Key:</strong> <span id="calculated-pubkey" class="text-monospace"></span></p>
+                                <small class="text-muted">Formula: Y = G * x</small>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Signature Verification</label>
+                            <div class="mt-2">
+                                <p><strong>Result:</strong> <span id="sig-verification-result" class="text-monospace"></span></p>
+                                <small class="text-muted">Formula: G*m + Y*r == R*s</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Cryptographic Formulas</h4>
+                </div>
+                <div class="card-body">
+                    <p>Signing Secret Recovery: k = (m1-m2)/(s1-s2) mod n</p>
+                    <p>Private Key Recovery: x = (s*k-m)/r mod n</p>
+                    <p>Public Key Calculation: Y = G * x</p>
+                    <p>Signature Creation: r = xcoord(G*k), s = (m+x*r)/k</p>
+                    <p>Signature Verification: G*m + Y*r == R*s</p>
+                    <p>Public Key Recovery: Y = (R*s - G*m)/r</p>
+                    <p>Point Validation: y² = x³ + 7</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="analysis-error" class="alert alert-danger d-none">
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- ECDSA Analyzer Script -->
+<script src="/static/ecdsa_analyzer.js"></script>
+<script>
+// Additional function to validate if a point is on the curve
+function validatePointOnCurve(x, y) {
+    // For secp256k1: y² = x³ + 7 mod p
+    try {
+        const p = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F');
+        const xBigInt = BigInt('0x' + x);
+        const yBigInt = BigInt('0x' + y);
+
+        // Calculate left side: y²
+        const left = (yBigInt * yBigInt) % p;
+
+        // Calculate right side: x³ + 7
+        const right = (xBigInt * xBigInt * xBigInt + BigInt(7)) % p;
+
+        // Check if point is on curve
+        const isOnCurve = left === right;
+
+        document.getElementById('point-valid').textContent = isOnCurve ? 
+            'Valid - Point is on the curve' : 'Invalid - Point is not on the curve';
+    } catch (e) {
+        document.getElementById('point-valid').textContent = 'Error validating point: ' + e.message;
+    }
+}
+
+
+// Placeholder functions -  REPLACE THESE WITH ACTUAL IMPLEMENTATION
+document.getElementById('calculate-ecdsa').addEventListener('click', function() {
+    // Implement ECDSA analysis here using values from input fields
+    // ... (complex ECDSA calculations) ...
+    // Update #ecdsa-k-result, #ecdsa-x-result, #ecdsa-success
+});
+
+document.getElementById('verify-params-btn').addEventListener('click', function() {
+    // Implement parameter verification here
+    // ... (parameter verification logic) ...
+    // Update #params-verification-result
+});
+
+document.getElementById('verify-k-btn').addEventListener('click', function() {
+  // Implement signing secret verification here
+  // ... (verification logic) ...
+  // Update #k-verification-result
+});
+
+//Add event listeners for auto-calculation (if checkbox is checked)
+document.getElementById('auto-calculate').addEventListener('change', function() {
+    // Implement auto-calculation logic here.
+});
+
+//Add event listeners to input fields to trigger auto-calculation if checkbox is checked.
+</script>
+{% endblock %}

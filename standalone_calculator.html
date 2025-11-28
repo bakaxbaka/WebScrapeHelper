@@ -1,0 +1,47 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 text-center mb-4">
+        <h1><i class="fas fa-calculator"></i> Bitcoin ECDSA Calculator</h1>
+        <p class="lead">A standalone Bitcoin elliptic curve calculator that works entirely in your browser</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <h3>Offline Calculator</h3>
+                <p>This calculator allows you to perform various ECDSA cryptographic operations for Bitcoin:</p>
+                
+                <ul>
+                    <li>Crack a private key using two signatures that reused the same nonce (k)</li>
+                    <li>Crack a private key using a known nonce (k)</li>
+                    <li>Calculate a public key from a private key</li>
+                    <li>Sign a message with a secret key</li>
+                    <li>Verify a message signature</li>
+                    <li>Find a public key from a signature</li>
+                    <li>Find the signing secret (k) used for a signature</li>
+                </ul>
+                
+                <p class="mt-4">You can use the calculator in two ways:</p>
+                
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('download_calculator') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-download"></i> Download Standalone HTML Calculator
+                    </a>
+                    <a href="/static/ecdsa_standalone.html" target="_blank" class="btn btn-success btn-lg">
+                        <i class="fas fa-external-link-alt"></i> Open Calculator In New Tab
+                    </a>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <i class="fas fa-info-circle"></i> The standalone calculator works completely in your browser with no server connections needed. All cryptographic operations are performed locally using JavaScript.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

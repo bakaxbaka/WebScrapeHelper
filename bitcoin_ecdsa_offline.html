@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin ECDSA Analyzer - Offline Version</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        h1, h2, h3, h4 {
+            color: #1a73e8;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+        }
+        .col-6 {
+            flex: 0 0 calc(50% - 20px);
+            max-width: calc(50% - 20px);
+            padding: 0 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .btn {
+            display: inline-block;
+            font-weight: 400;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            user-select: none;
+            border: 1px solid transparent;
+            padding: 8px 12px;
+            font-size: 14px;
+            line-height: 1.5;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-primary {
+            color: #fff;
+            background-color: #1a73e8;
+            border-color: #1a73e8;
+        }
+        .btn-info {
+            color: #fff;
+            background-color: #17a2b8;
+            border-color: #17a2b8;
+        }
+        .alert {
+            position: relative;
+            padding: 12px 20px;
+            margin-bottom: 16px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .alert-secondary {
+            color: #383d41;
+            background-color: #e2e3e5;
+            border-color: #d6d8db;
+        }
+        .text-danger {
+            color: #dc3545;
+        }
+        .text-success {
+            color: #28a745;
+        }
+        .text-warning {
+            color: #ffc107;
+        }
+        .text-break {
+            word-break: break-all;
+            word-wrap: break-word;
+        }
+        dl {
+            margin-bottom: 0;
+        }
+        dt {
+            font-weight: bold;
+        }
+        dd {
+            margin-bottom: 8px;
+            margin-left: 0;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0;
+        }
+        .d-none {
+            display: none;
+        }
+        .mb-3 {
+            margin-bottom: 15px;
+        }
+        .mt-4 {
+            margin-top: 20px;
+        }
+        .form-check {
+            margin-bottom: 15px;
+        }
+        .form-check-input {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bitcoin ECDSA Analyzer - Offline Version</h1>
+
+    <!-- ECDSA Analysis Form -->
+    <div class="card">
+        <div class="card-header">
+            <h2>ECDSA Analysis</h2>
+        </div>
+        <div class="card">
+            <p>Enter two signatures that share the same r value to recover the private key.</p>
+
+            <div class="alert alert-warning mb-3 d-none" id="ecdsa-warning">
+            </div>
+
+            <div class="row">
+                <div class="col-6">
+                    <h3>First Signature</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-r1">r value (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-r1" placeholder="e.g. a6e3c57dd01abe90086ce5af11ced6bfc5c6f69e9c92c18ef53c82862bfb5e8f">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-s1">s value (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-s1" placeholder="e.g. 5a259e3c979c8cf2b1f5d5796999ae00a1f539837bda2d3a3705bc051066e365">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-m1">Message hash (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-m1" placeholder="e.g. 8182a168b189ad2d5786e07dce0da1b9795c2eb31e4d8c89f12f69fbb3e8ff77">
+                    </div>
+                </div>
+                <div class="col-6">
+                    <h3>Second Signature</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-r2">r value (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-r2" placeholder="Same r value as first signature">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-s2">s value (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-s2" placeholder="Different s value">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="ecdsa-m2">Message hash (hex):</label>
+                        <input type="text" class="form-control" id="ecdsa-m2" placeholder="Different message hash">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="auto-calculate" class="form-check-input">
+                <label for="auto-calculate" class="form-check-label">
+                    Auto-calculate when values change
+                </label>
+            </div>
+
+            <button id="calculate-ecdsa" class="btn btn-primary">Analyze Signatures</button>
+
+            <div class="alert alert-info mt-4">
+                <p><strong>Note:</strong> For this attack to work, the signatures must share the same r value.</p>
+            </div>
+
+            <div class="mt-4">
+                <h3>Results:</h3>
+                <div class="card">
+                    <dl>
+                        <dt>Status:</dt>
+                        <dd id="ecdsa-success">Enter signatures to begin analysis</dd>
+
+                        <dt>Signing Secret (k):</dt>
+                        <dd class="text-break" id="ecdsa-k-result">Not calculated yet</dd>
+
+                        <dt>Private Key (x):</dt>
+                        <dd class="text-break" id="ecdsa-x-result">Not calculated yet</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parameter Verification -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h2>Parameter Verification</h2>
+        </div>
+        <div class="card">
+            <p>Verify if the ECDSA parameters adhere to the elliptic curve requirements.</p>
+
+            <button id="verify-params-btn" class="btn btn-info mb-3">Verify Parameters</button>
+
+            <div class="alert mb-3" id="params-verification-result">
+                Click 'Verify Parameters' to check if r, s, and m are valid.
+            </div>
+
+            <div class="alert alert-secondary">
+                <p><strong>Verification checks:</strong></p>
+                <ul>
+                    <li>0 < r < n (curve order)</li>
+                    <li>0 < s < n (curve order)</li>
+                    <li>Point R is on the curve (requires point calculation)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signing Secret Verification -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h2>Signing Secret (k) Verification</h2>
+        </div>
+        <div class="card">
+            <p>Verify if the recovered signing secret (k) is correct by checking signature equation.</p>
+
+            <div class="row">
+                <div class="col-6">
+                    <div class="form-group">
+                        <label class="form-label" for="signing-secret-value">Signing Secret (k) in hex:</label>
+                        <input type="text" class="form-control" id="signing-secret-value" placeholder="Enter or copy recovered k value">
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="form-group">
+                        <label class="form-label" for="private-key-value">Private Key (x) in hex:</label>
+                        <input type="text" class="form-control" id="private-key-value" placeholder="Enter or copy recovered x value">
+                    </div>
+                </div>
+            </div>
+
+            <button id="verify-k-btn" class="btn btn-info mb-3">Verify Signing Secret</button>
+
+            <div class="alert mb-3" id="k-verification-result">
+                Click 'Verify Signing Secret' to check if k produces the correct signature.
+            </div>
+
+            <div class="alert alert-secondary">
+                <p><strong>Verification equation:</strong></p>
+                <ul>
+                    <li>Checking if: s = (m + r·x)/k mod n</li>
+                    <li>Alternative check: r = x-coordinate of (G·k) mod n</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulas Reference -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h2>ECDSA Formula Reference</h2>
+        </div>
+        <div class="card">
+            <div class="row">
+                <div class="col-6">
+                    <div class="mb-3">
+                        <h3>Key Recovery Formulas</h3>
+                        <ul>
+                            <li><strong>Signing Secret Recovery:</strong> k = (m1-m2)/(s1-s2) mod n</li>
+                            <li><strong>Private Key Recovery:</strong> x = (s*k-m)/r mod n</li>
+                            <li><strong>Public Key Calculation:</strong> Y = G * x</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="mb-3">
+                        <h3>Signature Formulas</h3>
+                        <ul>
+                            <li><strong>Signature Creation:</strong> r = xcoord(G*k), s = (m+x*r)/k</li>
+                            <li><strong>Signature Verification:</strong> G*m + Y*r == R*s</li>
+                            <li><strong>Public Key Recovery:</strong> Y = (R*s - G*m)/r</li>
+                            <li><strong>Point Validation:</strong> y² = x³ + 7</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Bitcoin curve parameters
+        const CURVE_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+        const CURVE_P = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F');
+        const CURVE_A = 0n;
+        const CURVE_B = 7n;
+        const G_X = BigInt('0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798');
+        const G_Y = BigInt('0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8');
+
+        // Add event listeners once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event listeners for ECDSA analysis form
+            document.getElementById('calculate-ecdsa').addEventListener('click', analyzeECDSA);
+
+            // Add verification button event listeners
+            document.getElementById('verify-k-btn').addEventListener('click', verifySigningSecret);
+            document.getElementById('verify-params-btn').addEventListener('click', verifyParameters);
+
+            // Auto-calculate on input change (optional)
+            const inputFields = ['ecdsa-r1', 'ecdsa-s1', 'ecdsa-m1', 'ecdsa-r2', 'ecdsa-s2', 'ecdsa-m2'];
+            inputFields.forEach(id => {
+                document.getElementById(id).addEventListener('input', function() {
+                    if (document.getElementById('auto-calculate').checked) {
+                        analyzeECDSA();
+                    }
+                });
+            });
+
+            // Load example button
+            const loadExampleBtn = document.createElement('button');
+            loadExampleBtn.className = 'btn btn-info';
+            loadExampleBtn.style.marginLeft = '10px';
+            loadExampleBtn.textContent = 'Load Example';
+            loadExampleBtn.addEventListener('click', loadExample);
+            document.getElementById('calculate-ecdsa').after(loadExampleBtn);
+        });
+
+        // Example data for loading
+        function loadExample() {
+            document.getElementById('ecdsa-r1').value = "a6e3c57dd01abe90086ce5af11ced6bfc5c6f69e9c92c18ef53c82862bfb5e8f";
+            document.getElementById('ecdsa-s1').value = "5a259e3c979c8cf2b1f5d5796999ae00a1f539837bda2d3a3705bc051066e365";
+            document.getElementById('ecdsa-m1').value = "8182a168b189ad2d5786e07dce0da1b9795c2eb31e4d8c89f12f69fbb3e8ff77";
+            document.getElementById('ecdsa-r2').value = "a6e3c57dd01abe90086ce5af11ced6bfc5c6f69e9c92c18ef53c82862bfb5e8f";
+            document.getElementById('ecdsa-s2').value = "664f129a0e881bc49cdc43a3f54fb2eb99982c45341c7571cd81fb519e0cbc31";
+            document.getElementById('ecdsa-m2').value = "ec208baa0fc1c19f708a9ca96fdeff3ac3f230bb4a7ba4aede4942ad003c0f60";
+
+            // Trigger analysis
+            analyzeECDSA();
+        }
+
+        // Convert hex string to BigInt
+        function hexToBigInt(hex) {
+            if (!hex) return null;
+            // Remove '0x' prefix if present
+            hex = hex.replace(/^0x/i, '');
+            // Ensure hex is a valid string
+            if (!/^[0-9a-f]+$/i.test(hex)) {
+                throw new Error('Invalid hex string: ' + hex);
+            }
+            return BigInt('0x' + hex);
+        }
+
+        // BigInt modulo that works with negative numbers
+        function mod(a, n) {
+            return ((a % n) + n) % n;
+        }
+
+        // Modular inverse
+        function modInv(a, n) {
+            // Extended Euclidean Algorithm to find modular inverse
+            let t = 0n, newT = 1n;
+            let r = n, newR = a;
+
+            while (newR !== 0n) {
+                let quotient = r / newR;
+                [t, newT] = [newT, t - quotient * newT];
+                [r, newR] = [newR, r - quotient * newR];
+            }
+
+            if (r > 1n) throw new Error('Not invertible');
+            if (t < 0n) t += n;
+
+            return t;
+        }
+
+        // Calculate k from two signatures with the same r value
+        function calculateK(m1, s1, m2, s2, n) {
+            try {
+                // k = (m1 - m2) * (s1 - s2)^-1 mod n
+                const mDiff = mod(m1 - m2, n);
+                const sDiff = mod(s1 - s2, n);
+
+                if (sDiff === 0n) {
+                    throw new Error('s1 - s2 = 0, cannot compute k');
+                }
+
+                const sInv = modInv(sDiff, n);
+                const k = mod(mDiff * sInv, n);
+
+                return k;
+            } catch (e) {
+                console.error('Error calculating k:', e);
+                return null;
+            }
+        }
+
+        // Calculate private key x from k, r, s, and m
+        function calculatePrivateKey(k, r, s, m, n) {
+            try {
+                // x = (s*k - m) * r^-1 mod n
+                const rInv = modInv(r, n);
+                const x = mod((s * k - m) * rInv, n);
+
+                return x;
+            } catch (e) {
+                console.error('Error calculating private key:', e);
+                return null;
+            }
+        }
+
+        function analyzeECDSA() {
+            // Get form values
+            const r1 = document.getElementById('ecdsa-r1').value;
+            const s1 = document.getElementById('ecdsa-s1').value;
+            const m1 = document.getElementById('ecdsa-m1').value;
+            const r2 = document.getElementById('ecdsa-r2').value;
+            const s2 = document.getElementById('ecdsa-s2').value;
+            const m2 = document.getElementById('ecdsa-m2').value;
+
+            // Validate inputs
+            if (!r1 || !s1 || !m1) {
+                showWarning('Please fill in at least the first signature (r1, s1, m1)');
+                return;
+            }
+
+            try {
+                // Convert inputs to BigInt for calculations
+                const r1BigInt = hexToBigInt(r1);
+                const s1BigInt = hexToBigInt(s1);
+                const m1BigInt = hexToBigInt(m1);
+
+                // Check if we have a complete second signature
+                if (r2 && s2 && m2) {
+                    const r2BigInt = hexToBigInt(r2);
+                    const s2BigInt = hexToBigInt(s2);
+                    const m2BigInt = hexToBigInt(m2);
+
+                    // Verify r values are the same (required for k recovery)
+                    if (r1BigInt !== r2BigInt) {
+                        showWarning('Warning: r values are different. For signature reuse attack, r values must be identical.');
+                    } else {
+                        hideWarning();
+
+                        // Calculate k and x
+                        const kValue = calculateK(m1BigInt, s1BigInt, m2BigInt, s2BigInt, CURVE_N);
+
+                        if (kValue) {
+                            const xValue = calculatePrivateKey(kValue, r1BigInt, s1BigInt, m1BigInt, CURVE_N);
+
+                            // Update results
+                            document.getElementById('ecdsa-k-result').innerText = '0x' + kValue.toString(16);
+                            document.getElementById('ecdsa-x-result').innerText = '0x' + xValue.toString(16);
+                            document.getElementById('ecdsa-success').innerText = 'Successfully recovered private key!';
+
+                            // Update verification input fields
+                            document.getElementById('signing-secret-value').value = kValue.toString(16);
+                            document.getElementById('private-key-value').value = xValue.toString(16);
+                        } else {
+                            document.getElementById('ecdsa-success').innerText = 'Failed to recover private key';
+                            showWarning('Could not calculate k. Check that s1 ≠ s2 and inputs are valid.');
+                        }
+                    }
+                } else {
+                    showWarning('Need two complete signatures with the same r value for key recovery.');
+                }
+            } catch (e) {
+                console.error('Error processing input values:', e);
+                showWarning('Error processing input values: ' + e.message);
+            }
+        }
+
+        // Verify the signing secret (k) produces the correct signature
+        function verifySigningSecret() {
+            try {
+                const k = hexToBigInt(document.getElementById('signing-secret-value').value);
+                const x = hexToBigInt(document.getElementById('private-key-value').value);
+                const r = hexToBigInt(document.getElementById('ecdsa-r1').value);
+                const s = hexToBigInt(document.getElementById('ecdsa-s1').value);
+                const m = hexToBigInt(document.getElementById('ecdsa-m1').value);
+
+                if (!k || !r || !s || !m) {
+                    document.getElementById('k-verification-result').textContent = 'Please fill in all required fields';
+                    document.getElementById('k-verification-result').className = 'alert alert-warning';
+                    return;
+                }
+
+                // Check if s = (m + r*x)/k mod n
+                const expectedS = mod((m + r * x) * modInv(k, CURVE_N), CURVE_N);
+
+                if (expectedS === s) {
+                    document.getElementById('k-verification-result').textContent = 'Verification successful: k is correct!';
+                    document.getElementById('k-verification-result').className = 'alert alert-success';
+                } else {
+                    document.getElementById('k-verification-result').textContent = 'Verification failed: k is incorrect';
+                    document.getElementById('k-verification-result').className = 'alert alert-danger';
+                }
+            } catch (e) {
+                console.error('Error verifying signing secret:', e);
+                document.getElementById('k-verification-result').textContent = 'Error: ' + e.message;
+                document.getElementById('k-verification-result').className = 'alert alert-danger';
+            }
+        }
+
+        // Verify the ECDSA parameters satisfy the verification equation
+        function verifyParameters() {
+            try {
+                const r = hexToBigInt(document.getElementById('ecdsa-r1').value);
+                const s = hexToBigInt(document.getElementById('ecdsa-s1').value);
+                const m = hexToBigInt(document.getElementById('ecdsa-m1').value);
+
+                if (!r || !s || !m) {
+                    document.getElementById('params-verification-result').textContent = 'Please fill in r, s, and m values';
+                    document.getElementById('params-verification-result').className = 'alert alert-warning';
+                    return;
+                }
+
+                // Check if r and s are within valid range
+                if (r <= 0n || r >= CURVE_N || s <= 0n || s >= CURVE_N) {
+                    document.getElementById('params-verification-result').textContent = 
+                        'Parameters outside valid range (0 < r,s < n)';
+                    document.getElementById('params-verification-result').className = 'alert alert-danger';
+                    return;
+                }
+
+                // For full verification, we'd need the public key point
+                // Without it, we can only check that the parameters are in the valid range
+                document.getElementById('params-verification-result').textContent = 
+                    'Parameters are in valid range. For full verification, public key is needed.';
+                document.getElementById('params-verification-result').className = 'alert alert-success';
+
+            } catch (e) {
+                console.error('Error verifying parameters:', e);
+                document.getElementById('params-verification-result').textContent = 'Error: ' + e.message;
+                document.getElementById('params-verification-result').className = 'alert alert-danger';
+            }
+        }
+
+        function showWarning(message) {
+            const warningEl = document.getElementById('ecdsa-warning');
+            warningEl.textContent = message;
+            warningEl.classList.remove('d-none');
+        }
+
+        function hideWarning() {
+            document.getElementById('ecdsa-warning').classList.add('d-none');
+        }
+
+        /* BigNum Implementation */
+        'use strict';
+
+        // Extended GCD algorithm
+        function egcd(a, b) {
+            if (a === 0n) return [b, 0n, 1n];
+            const [g, x, y] = egcd(b % a, a);
+            return [g, y - (b / a) * x, x];
+        }
+
+        // Modular multiplicative inverse
+        function modinv(a, m) {
+            const [g, x, _] = egcd(BigInt(a), BigInt(m));
+            if (g !== 1n) throw new Error('Modular inverse does not exist');
+            return (x % m + m) % m;
+        }
+
+        // Modular exponentiation
+        function modexp(base, exponent, modulus) {
+            base = BigInt(base);
+            exponent = BigInt(exponent);
+            modulus = BigInt(modulus);
+
+            if (modulus === 1n) return 0n;
+
+            let result = 1n;
+            base = base % modulus;
+
+            while (exponent > 0n) {
+                if (exponent % 2n === 1n) {
+                    result = (result * base) % modulus;
+                }
+                exponent = exponent >> 1n;
+                base = (base * base) % modulus;
+            }
+
+            return result;
+        }
+
+        // Utility functions for numbers
+        function numval(x) {
+            if (typeof x === 'object' && x !== null && 'num' in x) return x.num;
+            return x;
+        }
+
+        function numiszero(x) {
+            return numval(x) === 0n;
+        }
+
+        function numone(x) {
+            return 1n;
+        }
+
+        function numequals(a, b) {
+            return numval(a) === numval(b);
+        }
+
+        function numshr(x) {
+            const val = BigInt(numval(x));
+            return [val & 1n, val >> 1n];
+        }
+
+        function cvnum(x, m) {
+            return BigInt(x);
+        }
+
+        /* Galois Field Implementation */
+        class Value {
+            constructor(field, num) {
+                this.field = field;
+                this.num = BigInt(num);
+            }
+            add(rhs) { return this.field.add(this, rhs); }
+            double() { return this.field.add(this, this); }
+            thrice() { return this.field.add(this.double(), this); }
+            sub(rhs) { return this.field.sub(this, rhs); }
+            mul(rhs) { return this.field.mul(this, rhs); }
+            square() { return this.field.mul(this, this); }
+            cube() { return this.field.mul(this.square(), this); }
+            div(rhs) { return this.field.div(this, rhs); }
+            pow(rhs) { return this.field.pow(this, rhs); }
+            sqrt(n) { return this.field.sqrt(this, n); }
+            cubert(n) { return this.field.cubert(this, n); }
+            neg() { return this.field.neg(this); }
+            inverse() { return this.field.inverse(this); }
+            iszero() { return this.field.iszero(this); }
+            equals(rhs) { return this.field.equals(this, rhs); }
+
+            shr() { return this.field.shr(this); }
+
+            int() { return this.num; }
+            uint() {
+                return this.num < 0n ? this.num + this.field.p : this.num;
+            }
+
+            toString() {
+                return this.field + ":0x" + this.uint().toString(16);
+            }
+        }
+
+        class GaloisField {
+            constructor(p) {
+                this.p = BigInt(p);
+            }
+
+            toString() {
+                if ("fieldtag" in this)
+                    return this.fieldtag;
+                else
+                    return "FIELD(0x" + this.p.toString(16) + ")";
+            }
+
+            value(x) {
+                return new Value(this, BigInt(numval(x)) % this.p);
+            }
+
+            add(lhs, rhs) {
+                this.checkfields(lhs, rhs);
+                return this.value((BigInt(numval(lhs)) + BigInt(numval(rhs))) % this.p);
+            }
+
+            sub(lhs, rhs) {
+                this.checkfields(lhs, rhs);
+                return this.value((BigInt(numval(lhs)) - BigInt(numval(rhs)) + this.p) % this.p);
+            }
+
+            neg(a) {
+                return this.value((-BigInt(numval(a)) + this.p) % this.p);
+            }
+
+            mul(lhs, rhs) {
+                this.checkfields(lhs, rhs);
+                return this.value((BigInt(numval(lhs)) * BigInt(numval(rhs))) % this.p);
+            }
+
+            inverse(a) {
+                if (numiszero(a)) throw new Error("Division by zero");
+                return this.value(modinv(numval(a), this.p));
+            }
+
+            div(lhs, rhs) {
+                this.checkfields(lhs, rhs);
+                return this.mul(lhs, this.inverse(rhs));
+            }
+
+            pow(lhs, rhs) {
+                return this.value(modexp(numval(lhs), numval(rhs), this.p));
+            }
+
+            checkfields() {
+                for (let x of arguments) {
+                    if (x&& x.field && x.field.p !== this.p) {
+                        console.log("incorrect field", x.field.p, this.p);
+                        throw new Error("incorrect field");
+                    }
+                }
+            }
+
+            legendre(a) {
+                const [_, exp] = numshr(this.p - numone(this.p));
+                const ls = a.pow(exp);
+                return ls.equals(this.value(-1n)) ? -1 : 1;
+            }
+
+            sqrt(a, n) {
+                if (a.iszero())
+                    return a;
+                if (this.p === 2n)
+                    return a;
+                if (this.legendre(a) !== 1)
+                    return undefined;
+
+                const sw = Number(this.p % 4n);
+                if (sw === 3) {
+                    let [_, exp] = numshr(this.p + numone(this.p));
+                    [_, exp] = numshr(exp);
+                    const res = a.pow(exp);
+                    return (Number(numshr(numval(res))[0]) === n) ? res : res.neg();
+                }
+
+                let s = this.p - numone(this.p);
+                let e = 0;
+                while (true) {
+                    const [bit, res] = numshr(s);
+                    if (bit)
+                        break;
+                    s = res;
+                    e++;
+                }
+
+                let k = this.value(2n);
+                while (this.legendre(k) !== -1) {
+                    k = k.add(1n);
+                }
+
+                const [_, ss] = numshr(s + numone(this.p));
+                let x = a.pow(ss);
+                let b = a.pow(s);
+                let g = k.pow(s);
+                let r = e;
+
+                while (true) {
+                    let t = b;
+                    let m = 0;
+                    while (m < r) {
+                        if (t.equals(numone(this.p)))
+                            break;
+                        t = t.square();
+                        m++;
+                    }
+                    if (m === 0)
+                        return (Number(numshr(numval(x))[0]) === n) ? x : x.neg();
+                    if (m === r)
+                        m = r - 1;
+
+                    const gs = g.pow(2n ** (r - m - 1));
+                    g = gs.square();
+                    x = x.mul(gs);
+                    b = b.mul(g);
+                    r = m;
+                }
+            }
+
+            cubert(a, n) {
+                function onemod(p, r) {
+                    const two = 2n;
+                    const one = 1n;
+                    let t = p - two;
+                    while (modexp(t, (p - one) / r, p) === one)
+                        t = t - one;
+                    return modexp(t, (p - one) / r, p);
+                }
+
+                function solution(p, root, n) {
+                    if (n === 0) {
+                        return root;
+                    }
+                    const g = onemod(p, 3n);
+                    root = root.mul(this.value(g));
+                    if (n === 1) {
+                        return root;
+                    }
+                    return root.mul(this.value(g));
+                }
+
+                if (this.p === 2n)
+                    return a;
+                if (this.p === 3n)
+                    return a;
+                if (a.iszero())
+                    return a;
+                if (this.p % 3n === 2n)
+                    return a.pow((this.p + this.p - 1n) / 3n);
+
+                const x = a.pow((this.p - 1n) / 3n);
+                if (numval(x) > 1n) {
+                    return undefined;
+                }
+
+                const sw = Number(this.p % 27n);
+                if (sw % 9 === 4) {
+                    const root = a.pow((this.p + this.p + 1n) / 9n);
+                    if (root.pow(3n).equals(a)) return solution.call(this, this.p, root, n);
+                }
+                else if (sw % 9 === 7) {
+                    const root = a.pow((this.p + 2n) / 9n);
+                    if (root.pow(3n).equals(a)) return solution.call(this, this.p, root, n);
+                }
+                else if (sw === 10) {
+                    let root = a.pow((this.p + this.p + 7n) / 27n);
+                    const h = onemod(this.p, 9n);
+                    for (let i = 0; i < 9; i++) {
+                        if (root.pow(3n).equals(a)) return solution.call(this, this.p, root, n);
+                        root = root.mul(this.value(h));
+                    }
+                }
+                else if (sw === 19) {
+                    let root = a.pow((this.p + 8n) / 27n);
+                    const h = onemod(this.p, 9n);
+                    for (let i = 0; i < 9; i++) {
+                        if (root.pow(3n).equals(a)) return solution.call(this, this.p, root, n);
+                        root = root.mul(this.value(h));
+                    }
+                }
+                else {
+                    console.log("unhandled cuberot, p%27=", sw);
+                }
+            }
+
+            zero() { return 0n; }
+            iszero(x) { return numval(x) === 0n; }
+
+            equals(lhs, rhs) {
+                this.checkfields(lhs, rhs);
+                return lhs.sub(rhs).iszero();
+            }
+
+            shr(x) {
+                const [bit, res] = numshr(numval(x));
+                return [bit, this.value(res)];
+            }
+
+            equalsfield(f) {
+                return this.p === f.p;
+            }
+        }
+
+        /* Elliptic Curve Implementation */
+        class Point {
+            constructor(curve, x, y) {
+                this.curve = curve;
+                this.x = x;
+                this.y = y;
+            }
+
+            add(rhs) { return this.curve.add(this, rhs); }
+            double() { return this.curve.add(this, this); }
+            sub(rhs) { return this.curve.sub(this, rhs); }
+            mul(rhs) { return this.curve.mul(this, rhs); }
+            div(rhs) { return this.curve.div(this, rhs); }
+
+            neg() { return this.curve.neg(this); }
+            isinf() { return typeof(this.x) === "undefined"; }
+            equals(rhs) { return this.curve.equals(this, rhs); }
+            isoncurve() { return this.curve.isoncurve(this); }
+
+            toString() { return "Point(" + this.x + ", " + this.y + ")"; }
+        }
+
+        class EllipticCurve {
+            constructor(field, a, b) {
+                this.field = field;
+                this.a = a;
+                this.b = b;
+                this.order = undefined;
+            }
+
+            point(x, y) {
+                if (x instanceof Point)
+                    return x;
+                if (typeof(x) === "undefined")
+                    return new Point(this, undefined, undefined);
+                return new Point(this, this.coord(x), this.coord(y));
+            }
+
+            decompress(x, flag) {
+                const y2 = x.cube().add(x.mul(this.a)).add(this.b);
+                const y = y2.sqrt(flag);
+                if (!y)
+                    throw new Error("no sqrt for x");
+                return this.point(x, y);
+            }
+
+            ydecompress(y, flag) {
+                if (!numiszero(this.a)) {
+                    console.log("ydecompress only works for curves where a==0");
+                    return;
+                }
+                const x = y.square().sub(this.b).cubert(flag);
+                if (!x)
+                    throw new Error("no cubert for y");
+                return this.point(x, y);
+            }
+
+            coord(x) { return this.field.value(x); }
+
+            add(lhs, rhs) {
+                if (lhs.isinf()) return rhs;
+                if (rhs.isinf()) return lhs;
+
+                let l;
+                if (lhs.equals(rhs)) {
+                    if (lhs.y.iszero())
+                        return this.infinity();
+                    l = lhs.x.square().thrice().add(this.a).div(lhs.y.double());
+                }
+                else if (lhs.x.equals(rhs.x))
+                    return this.infinity();
+                else {
+                    l = lhs.y.sub(rhs.y).div(lhs.x.sub(rhs.x));
+                }
+
+                const x = l.square().sub(lhs.x.add(rhs.x));
+                const y = l.mul(lhs.x.sub(x)).sub(lhs.y);
+
+                return this.point(x, y);
+            }
+
+            sub(lhs, rhs) { return this.add(lhs, this.neg(rhs)); }
+            neg(p) { return this.point(p.x, p.y.neg()); }
+
+            mul(lhs, rhs) {
+                if (rhs instanceof Point) {
+                    return this.mul(rhs, lhs);
+                }
+
+                let accu = this.infinity();
+                let shifter = lhs;
+                let scalar = rhs;
+                let bit;
+
+                while (!numiszero(scalar)) {
+                    [bit, scalar] = numshr(scalar);
+                    if (bit)
+                        accu = accu.add(shifter);
+                    shifter = shifter.add(shifter);
+                }
+
+                return accu;
+            }
+
+            equals(lhs, rhs) {
+                if (lhs.isinf() && rhs.isinf())
+                    return true;
+                if (lhs.isinf() || rhs.isinf())
+                    return false;
+                return lhs.x.equals(rhs.x) && lhs.y.equals(rhs.y);
+            }
+
+            div(lhs, rhs) { return this.mul(lhs, rhs.inverse()); }
+
+            infinity() { return this.point(undefined, undefined); }
+
+            isoncurve(p) {
+                this.checkcurve(p);
+                return p.isinf() || p.y.square().equals(p.x.cube().add(p.x.mul(this.a)).add(this.b));
+            }
+
+            checkcurve(p) {
+                if (!this.equalscurve(p.curve))
+                    console.log("point belongs to a different curve");
+            }
+
+            equalscurve(c) {
+                return numequals(this.a, c.a) && numequals(this.b, c.b) && this.field.equalsfield(c.field);
+            }
+        }
+
+        /* ECDSA Implementation */
+        class ECDSA {
+            constructor(ec, G) {
+                this.ec = ec;
+                this.G = G;
+            }
+
+            scalar(x) { return this.ec.order.value(x); }
+
+            calcpub(x) {
+                return this.G.mul(x);
+            }
+
+            sign(m, x, k) {
+                const R = this.G.mul(k);
+                const s = m.add(x.mul(this.scalar(R.x))).div(k);
+                return [R.x, s];
+            }
+
+            verify(m, Y, r, s) {
+                const R = this.G.mul(m).add(Y.mul(r)).div(s);
+                return r.equals(this.scalar(R.x));
+            }
+
+            crack2(r, m1, m2, s1, s2) {
+                const k = m1.sub(m2).div(s1.sub(s2));
+                const x1 = this.crack1r(k, m1, r, s1);
+                const x2 = this.crack1r(k, m2, r, s2);
+
+                if (x1.equals(x2))
+                    return [k, x1];
+
+                console.log("unexpectedly: x1 != x2");
+                console.log("k=", k);
+                console.log("x1=", x1);
+                console.log("x2=", x2);
+                return [0, 0];
+            }
+
+            crack1r(k, m, r, s) {
+                return s.mul(k).sub(m).div(r);
+            }
+
+            crack1(k, m, s) {
+                const R = this.G.mul(k);
+                return this.crack1r(k, m, this.scalar(R.x), s);
+            }
+
+            findk(m, x, r, s) {
+                return m.add(x.mul(r)).div(s);
+            }
+
+            findpk(m, r, s, flag) {
+                const R = this.ec.decompress(this.ec.coord(r), flag);
+                return R.mul(s.div(r)).sub(this.G.mul(m.div(r)));
+            }
+        }
+
+        /* Bitcoin Curve Implementation */
+        function secp256k1() {
+            const f = new GaloisField(2n**256n - 2n**32n - 977n);
+            f.fieldtag = "coord";
+            const ec = new EllipticCurve(f, 0n, 7n);
+            const g = ec.point(
+                0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,
+                0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n
+            );
+
+            ec.order = new GaloisField(2n**256n - 432420386565659656852420866394968145599n);
+            ec.order.fieldtag = "scalar";
+
+            return new ECDSA(ec, g);
+        }
+
+        /* UI Functionality */
+        // Example data
+        const example = {
+            k:  "bc614e",
+            x:  "51c4dba2c28fc89b208550477a514c87f9d0db0354f03b7c61f08c0a0e3118a2",
+
+            px: "bb6c1de01f36618ae05f7c183c22dfa8797e779f39537752c27e2dc045b0e694",
+            py: "2f8af53270bf045f2258834b6dad7481ad6fca009d80f5b54697b08d104fc7b3",
+
+            r:  "cabc3692f1f7ba75a8572dc5d270b35bcc00650534f6e5ecd6338e55355454d5",
+            s1: "f65bfc44435a91814c142a3b8ee288a9183e6a3f012b84545d1fe334ccfac25e",
+            m1: "9b076ad2fe6b2ce63acf4edf7fc82d5152d3c8bffb36b944da7a1cce038f544a",
+
+            s2: "9cae782a191f3e742d9d4ff8f726d097a3a256af9fbc1faf16e7ec4d9fcf6feb",
+            m2: "85e43d48a83d8713a0fe253bf6b1fc70b8ee780e54749dc500f2880b056c4383",
+        };
+
+        const B = secp256k1();
+
+        function setvalue(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                if (element.tagName === 'INPUT') {
+                    element.value = value;
+                } else {
+                    element.textContent = value;
+                }
+            }
+        }
+
+        function getvalue(id) {
+            const element = document.getElementById(id);
+            if (element && element.tagName === 'INPUT') {
+                return element.value;
+            }
+            return null;
+        }
+
+        function getnumber(id) {
+            let val = getvalue(id);
+            if (!val) {
+                return B.scalar(0n);
+            }
+            if (!val.startsWith("0x")) {
+                val = "0x" + val;
+            }
+            try {
+                return B.scalar(BigInt(val));
+            } catch (e) {
+                console.error("Invalid number format:", e);
+                return B.scalar(0n);
+            }
+        }
+
+        // Load functions
+        function load_crack2() {
+            setvalue("crack2-r", example.r);
+            setvalue("crack2-m1", example.m1);
+            setvalue("crack2-s1", example.s1);
+            setvalue("crack2-m2", example.m2);
+            setvalue("crack2-s2", example.s2);
+        }
+
+        function do_crack2() {
+            const r = getnumber("crack2-r");
+            const m1 = getnumber("crack2-m1");
+            const m2 = getnumber("crack2-m2");
+            const s1 = getnumber("crack2-s1");
+            const s2 = getnumber("crack2-s2");
+
+            try {
+                const [k, x] = B.crack2(r, m1, m2, s1, s2);
+                setvalue("crack2-k", k.uint().toString(16));
+                setvalue("crack2-x", x.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_crack2:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_crack1() {
+            setvalue("crack1-k", example.k);
+            setvalue("crack1-s", example.s1);
+            setvalue("crack1-m", example.m1);
+        }
+
+        function do_crack1() {
+            const k = getnumber("crack1-k");
+            const m = getnumber("crack1-m");
+            const s = getnumber("crack1-s");
+
+            try {
+                const x = B.crack1(k, m, s);
+                setvalue("crack1-x", x.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_crack1:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_calcpub() {
+            setvalue("calcpub-x", example.x);
+        }
+
+        function do_calcpub() {
+            const x = getnumber("calcpub-x");
+
+            try {
+                const Y = B.calcpub(x);
+                setvalue("calcpub-px", Y.x.uint().toString(16));
+                setvalue("calcpub-py", Y.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_calcpub:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_calcsig() {
+            setvalue("calcsig-k", example.k);
+            setvalue("calcsig-x", example.x);
+            setvalue("calcsig-m", example.m1);
+        }
+
+        function do_calcsig() {
+            const x = getnumber("calcsig-x");
+            const k = getnumber("calcsig-k");
+            const m = getnumber("calcsig-m");
+
+            try {
+                const [r, s] = B.sign(m, x, k);
+                setvalue("calcsig-r", r.uint().toString(16));
+                setvalue("calcsig-s", s.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_calcsig:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_verifysig() {
+            setvalue("verifysig-m", example.m1);
+            setvalue("verifysig-r", example.r);
+            setvalue("verifysig-s", example.s1);
+            setvalue("verifysig-px", example.px);
+            setvalue("verifysig-py", example.py);
+        }
+
+        function do_verifysig() {
+            const r = getnumber("verifysig-r");
+            const s = getnumber("verifysig-s");
+            const m = getnumber("verifysig-m");
+            const px = getnumber("verifysig-px");
+            const py = getnumber("verifysig-py");
+
+            try {
+                const Y = B.ec.point(px, py);
+                const ok = B.verify(m, Y, r, s);
+                setvalue("verifysig-result", ok ? "ok" : "invalid");
+            } catch (e) {
+                console.error("Error in do_verifysig:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_findpk() {
+            setvalue("findpk-m", example.m1);
+            setvalue("findpk-r", example.r);
+            setvalue("findpk-s", example.s1);
+        }
+
+        function do_findpk() {
+            const m = getnumber("findpk-m");
+            const r = getnumber("findpk-r");
+            const s = getnumber("findpk-s");
+
+            try {
+                const Y0 = B.findpk(m, r, s, 0);
+                setvalue("findpk-px0", Y0.x.uint().toString(16));
+                setvalue("findpk-py0", Y0.y.uint().toString(16));
+
+                const Y1 = B.findpk(m, r, s, 1);
+                setvalue("findpk-px1", Y1.x.uint().toString(16));
+                setvalue("findpk-py1", Y1.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_findpk:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_findk() {
+            setvalue("findk-x", example.x);
+            setvalue("findk-m", example.m1);
+            setvalue("findk-r", example.r);
+            setvalue("findk-s", example.s1);
+        }
+
+        function do_findk() {
+            const x = getnumber("findk-x");
+            const m = getnumber("findk-m");
+            const r = getnumber("findk-r");
+            const s = getnumber("findk-s");
+
+            try {
+                const k = B.findk(m, x, r, s);
+                setvalue("findk-k", k.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_findk:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_add() {
+            setvalue("addpt-x1", B.G.x.uint().toString(16));
+            setvalue("addpt-y1", B.G.y.uint().toString(16));
+            const BB = B.G.mul(B.scalar(BigInt("0x" + example.x)));
+            setvalue("addpt-x2", BB.x.uint().toString(16));
+            setvalue("addpt-y2", BB.y.uint().toString(16));
+        }
+
+        function do_add() {
+            const x1 = getnumber("addpt-x1");
+            const y1 = getnumber("addpt-y1");
+            const x2 = getnumber("addpt-x2");
+            const y2 = getnumber("addpt-y2");
+
+            try {
+                const C = B.ec.point(x1, y1).add(B.ec.point(x2, y2));
+                setvalue("addpt-x3", C.x.uint().toString(16));
+                setvalue("addpt-y3", C.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_add:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_mul() {
+            setvalue("mulpt-x1", B.G.x.uint().toString(16));
+            setvalue("mulpt-y1", B.G.y.uint().toString(16));
+            setvalue("mulpt-a", example.x);
+        }
+
+        function do_mul() {
+            const x1 = getnumber("mulpt-x1");
+            const y1 = getnumber("mulpt-y1");
+            const a = getnumber("mulpt-a");
+
+            try {
+                const C = B.ec.point(x1, y1).mul(a);
+                setvalue("mulpt-x2", C.x.uint().toString(16));
+                setvalue("mulpt-y2", C.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_mul:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_div() {
+            setvalue("divpt-x1", B.G.x.uint().toString(16));
+            setvalue("divpt-y1", B.G.y.uint().toString(16));
+            setvalue("divpt-a", example.x);
+        }
+
+        function do_div() {
+            const x1 = getnumber("divpt-x1");
+            const y1 = getnumber("divpt-y1");
+            const a = getnumber("divpt-a");
+
+            try {
+                // We need to do division in the scalar field
+                const aInv = B.ec.order.value(a).inverse();
+                const C = B.ec.point(x1, y1).mul(aInv);
+                setvalue("divpt-x2", C.x.uint().toString(16));
+                setvalue("divpt-y2", C.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_div:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_decompx() {
+            setvalue("decompx-x", B.G.x.uint().toString(16));
+        }
+
+        function do_decompx() {
+            const x = getnumber("decompx-x");
+
+            try {
+                const X0 = B.ec.decompress(B.ec.coord(x), 0);
+                const X1 = B.ec.decompress(B.ec.coord(x), 1);
+                setvalue("decompx-y0", X0.y.uint().toString(16));
+                setvalue("decompx-y1", X1.y.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_decompx:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_decompy() {
+            setvalue("decompy-y", B.G.y.uint().toString(16));
+        }
+
+        function do_decompy() {
+            const y = getnumber("decompy-y");
+
+            try {
+                const X0 = B.ec.ydecompress(B.ec.coord(y), 0);
+                const X1 = B.ec.ydecompress(B.ec.coord(y), 1);
+                const X2 = B.ec.ydecompress(B.ec.coord(y), 2);
+                setvalue("decompy-x0", X0.x.uint().toString(16));
+                setvalue("decompy-x1", X1.x.uint().toString(16));
+                setvalue("decompy-x2", X2.x.uint().toString(16));
+            } catch (e) {
+                console.error("Error in do_decompy:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        function load_validatexy() {
+            setvalue("validatexy-px", example.px);
+            setvalue("validatexy-py", example.py);
+        }
+
+        function do_validatexy() {
+            const px = getnumber("validatexy-px");
+            const py = getnumber("validatexy-py");
+
+            try {
+                const Y = B.ec.point(px, py);
+                const ok = Y.isoncurve();
+                setvalue("validatexy-result", ok ? "ok" : "invalid");
+            } catch (e) {
+                console.error("Error in do_validatexy:", e);
+                alert("Error: " + e.message);
+            }
+        }
+
+        // Initialize all examples when the page loads
+        window.onload = function() {
+            load_crack2();
+            load_crack1();
+            load_calcpub();
+            load_calcsig();
+            load_verifysig();
+            load_findpk();
+            load_findk();
+            load_add();
+            load_mul();
+            load_div();
+            load_decompx();
+            load_decompy();
+            load_validatexy();
+        };
+    </script>
+</body>
+</html>

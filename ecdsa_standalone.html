@@ -1,0 +1,1042 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bitcoin ECDSA Calculator - Offline</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .card {
+            background-color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        td {
+            padding: 8px;
+            vertical-align: top;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .result {
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .alert {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .alert-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bitcoin ECDSA Calculator - Offline Version</h1>
+    <p>This tool provides various ECDSA cryptographic operations for Bitcoin. All calculations are performed locally in your browser.</p>
+
+    <div class="card">
+        <h2>Example, cracking a key using secret-reuse</h2>
+        <p>When a signing secret was used to sign two different messages, you can recover the signing secret with this 
+        calculation: <pre> k = (m1-m2)/(s1-s2) </pre>
+        And then calculate x in the same way as in the next example.
+        </p>
+        <table id="crack2">
+            <tr>
+                <td>r: <input size="64" id="crack2_r"></td>
+                <td>
+                    <button onclick="do_crack2()">Do Crack</button>
+                    <button onclick="load_crack2()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>m1: <input size="64" id="crack2_m1"></td>
+                <td>s1: <input size="64" id="crack2_s1"></td>
+            </tr>
+            <tr>
+                <td>m2: <input size="64" id="crack2_m2"></td>
+                <td>s2: <input size="64" id="crack2_s2"></td>
+            </tr>
+            <tr>
+                <td>k: <span id="crack2_k" class="result"></span></td>
+                <td>x: <span id="crack2_x" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, cracking a key using known secret</h2>
+        <p>When you have cracked or otherwise guessed a signing secret for a signature, the private key
+        is calculated like this:
+        <pre>x = (s*k-m)/r</pre>
+        </p>
+        <table id="crack1">
+            <tr>
+                <td>k: <input size="64" id="crack1_k"></td>
+                <td>
+                    <button onclick="do_crack1()">Do Crack</button>
+                    <button onclick="load_crack1()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>s: <input size="64" id="crack1_s"></td>
+                <td>m: <input size="64" id="crack1_m"></td>
+            </tr>
+            <tr>
+                <td>x: <span id="crack1_x" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, calculate a public key</h2>
+        <p>Given the private key, you can calculate the public key like this:
+        <pre>Y = G * x</pre>
+        </p>
+        <table id="calcpub">
+            <tr>
+                <td>x: <input size="64" id="calcpub_x"></td>
+                <td>
+                    <button onclick="do_calcpub()">Calc pub</button>
+                    <button onclick="load_calcpub()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>px: <span id="calcpub_px" class="result"></span></td>
+                <td>py: <span id="calcpub_py" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, sign a message with a secret key</h2>
+        <p>A ecdsa signature is calculated like this:
+        <pre>r = xcoord(G*k),  s = (m+x*r)/k</pre>
+        </p>
+        <table id="calcsig">
+            <tr>
+                <td>x: <input size="64" id="calcsig_x"></td>
+                <td>k: <input size="64" id="calcsig_k"></td>
+            </tr>
+            <tr>
+                <td>m: <input size="64" id="calcsig_m"></td>
+                <td>
+                    <button onclick="do_calcsig()">Calc sig</button>
+                    <button onclick="load_calcsig()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>r: <span id="calcsig_r" class="result"></span></td>
+                <td>s: <span id="calcsig_s" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, verify a message signature.</h2>
+        <p>A ECDSA signature is verified using this calculation:
+        <pre>G*m+Y*r==R*s</pre>
+        </p>
+        <table id="verifysig">
+            <tr>
+                <td>px: <input size="64" id="verifysig_px"></td>
+                <td>py: <input size="64" id="verifysig_py"></td>
+            </tr>
+            <tr>
+                <td>r: <input size="64" id="verifysig_r"></td>
+                <td>s: <input size="64" id="verifysig_s"></td>
+            </tr>
+            <tr>
+                <td>m: <input size="64" id="verifysig_m"></td>
+                <td>
+                    <button onclick="do_verifysig()">Verify sig</button>
+                    <button onclick="load_verifysig()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>result: <span id="verifysig_result" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, find pubkey.</h2>
+        <p>Given a signature and messagehash, you can calculate the public key:
+        <pre>Y = (R*s-G*m)/r</pre>
+        </p>
+        <table id="findpk">
+            <tr>
+                <td>r: <input size="64" id="findpk_r"></td>
+                <td>s: <input size="64" id="findpk_s"></td>
+            </tr>
+            <tr>
+                <td>m: <input size="64" id="findpk_m"></td>
+                <td>
+                    <button onclick="do_findpk()">Find Pubkey</button>
+                    <button onclick="load_findpk()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>px: <span id="findpk_px0" class="result"></span></td>
+                <td>py: <span id="findpk_py0" class="result"></span></td>
+            </tr>
+            <tr>
+                <td>px: <span id="findpk_px1" class="result"></span></td>
+                <td>py: <span id="findpk_py1" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Example, find signing secret.</h2>
+        <p>given a privatekey, message and signature, you can calculate the signing secret which was used:
+        <pre>k = (m+x*r)/s</pre>
+        </p>
+        <table id="findk">
+            <tr>
+                <td>r: <input size="64" id="findk_r"></td>
+                <td>s: <input size="64" id="findk_s"></td>
+            </tr>
+            <tr>
+                <td>x: <input size="64" id="findk_x"></td>
+            </tr>
+            <tr>
+                <td>m: <input size="64" id="findk_m"></td>
+                <td>
+                    <button onclick="do_findk()">Find secret</button>
+                    <button onclick="load_findk()">Load example</button>
+                </td>
+            </tr>
+            <tr>
+                <td>k: <span id="findk_k" class="result"></span></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Curve Parameters (secp256k1)</h2>
+        <div class="alert alert-info">
+            <p><strong>p (Field Order):</strong> <span id="param-p" class="text-monospace">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F</span></p>
+            <p><strong>n (Group Order):</strong> <span id="param-n" class="text-monospace">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141</span></p>
+            <p><strong>G (Generator Point):</strong></p>
+            <p>Gx: <span id="param-gx" class="text-monospace">79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798</span></p>
+            <p>Gy: <span id="param-gy" class="text-monospace">483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8</span></p>
+        </div>
+    </div>
+
+    <script>
+/* bignum.js */
+'use strict';
+
+// operations in GFn
+// all inputs and outputs are bigints, or arrays of bigints.
+
+// utility functions for bigint handling.
+// calculate: (base**exp) % p
+function expmod(base, exp, p)
+{
+    if (base == 0n)
+        return 0n;
+    if (exp == 0n)
+        return 1n;
+    let y = 1n;
+    while (exp > 0n) {
+        if ((exp % 2n) == 0n) {
+            base = (base * base) % p;
+            exp /= 2n;
+        }
+        else {
+            y = (y * base) % p;
+            exp -= 1n;
+        }
+    }
+    return y;
+}
+
+function modinv(a, p)
+{
+    return expmod(a, p-2n, p);
+}
+
+// calculate a sqare root in GFp
+function sqrt(a, p)
+{
+    if (p % 4n == 3n)
+        return expmod(a, (p+1n)/4n, p);
+
+    throw Error("don't know how to sqrt");
+}
+
+// given x, try to find y,  such that y^2 == x^3 + 7
+function modsqrt(x, p)
+{
+    return sqrt(x, p);
+}
+
+// find a cube root mod p : x^3 = a
+function cuberoot(a, p)
+{
+    return expmod(a, (p*2n-1n)/3n, p);
+}
+/* gfp.js */
+// operations in the prime field GFp.
+'use strict';
+
+class GFp {
+    constructor(p) {
+        this.p = p;
+    }
+    // this creates a 'number' in the prime field
+    // numbers in the field: 0 <= x < p
+    field(x) {
+        if (typeof x == 'number')
+            x = BigInt(x);
+        return ((x % this.p) + this.p) % this.p;
+    }
+    // x+y
+    add(x, y) {
+        return this.field(x + y);
+    }
+    // x-y
+    sub(x, y) {
+        return this.field(x - y);
+    }
+    // -x
+    neg(x) {
+        return this.field(-x);
+    }
+    // x*y
+    mul(x, y) {
+        return this.field(x * y);
+    }
+    // x/y
+    div(x, y) {
+        return this.mul(x, this.inv(y));
+    }
+    // 1/x
+    inv(x) {
+        if (x == 0n)
+            throw Error("divide by zero");
+        return modinv(x, this.p);
+    }
+    // x^e
+    pow(x, e) {
+        return expmod(x, e, this.p);
+    }
+    // return true when x is a perfect square
+    issquare(x) {
+        return this.pow(x, (this.p-1n)/2n) == 1n;
+    }
+    // x^(1/2)
+    sqrt(x) {
+        if (!this.issquare(x))
+            throw Error(`${x} has no square root in Fp: ${this.p}`);
+        return modsqrt(x, this.p);
+    }
+    // x^(1/3)
+    cbrt(x) {
+        return cuberoot(x, this.p);
+    }
+}
+/* ec.js */
+// operations on an elliptic curve.
+'use strict';
+
+class EC {
+    constructor() {
+        // empty - will be overridden.
+    }
+
+    // create Point on curve with coordinates (x, y)
+    point(x, y) {
+        return new Point(this, x, y);
+    }
+    // create a coord for this curve.
+    coord(x) {
+        return this.gfp.field(x);
+    }
+    // create a scalar for this curve.
+    scalar(x) {
+        return this.gfn.field(x);
+    }
+    // decompress y from x
+    decompress(x, yparity) {
+        let y2 = this.calculate_y2(x);
+        let y = this.gfp.sqrt(y2);
+
+        // verify that this is a valid point
+        if (this.gfp.mul(y, y) != y2)
+            throw Error("invalid point");
+
+        if (this.parity(y) != yparity)
+            y = this.gfp.neg(y);
+
+        return this.point(x, y);
+    }
+
+    // find all x with y
+    ydecompress(y, soln)
+    {
+        // y^2 = x^3+0*x+7
+        // 0 = x^3 - y^2 + 7
+
+        // find cube root
+        let u = this.gfp.field(this.gfp.sub(y*y, 7n));
+        let L = (this.gfp.p % 3n) == 2n;
+        let rt;
+        if (soln==0)
+            rt = this.gfp.neg(this.gfp.pow(u, (this.gfp.p+1n)/3n));
+        else if (soln==1)
+            rt = this.gfp.pow(u, (this.gfp.p+1n)/3n);
+        else if (soln==2)
+            // note: for p % 3 == 1,  third root is y^((p-1)/3) * w, where w is the cube root of 1 mod p
+            // but for bitcoin specific values this is not possible.
+            throw Error("invalid root");
+
+        let x = this.gfp.neg(rt);
+
+        if (this.gfp.pow(x, 3n) == u)
+            ;
+        else
+            throw Error("verify failed");
+
+        return this.point(x, y);
+    }
+
+    parity(y) {
+        return Number(y % 2n);
+    }
+
+    // check if (x, y) is on the curve.
+    check(x, y) {
+        let y2 = this.gfp.mul(y, y);
+        let calc = this.calculate_y2(x);
+        return y2 == calc;
+    }
+}
+
+// point implementation, a point on a elliptic curve.
+class Point {
+    constructor(ec, x, y) {
+        this.ec = ec;
+        // ensure the x,y coords are in the field
+        this.x = ec.gfp.field(x);
+        this.y = ec.gfp.field(y);
+
+        // when we uncomment this: error: y^2=6c5cb9e542b0f700b1eedb0eda225a23f44382c1e1eeb55c20be0389f5fa294  != x^3+ax+b=6c5cb9e542b0f700b1eedb0eda225a23f44382c1e1eeb55c20be0389f5fa294
+        // if (!ec.check(this.x, this.y))
+        //     throw Error(`(${this.x}, ${this.y}) is not on the curve`);
+    }
+
+    isoncurve() {
+        return this.ec.check(this.x, this.y);
+    }
+
+    // scalar multiplication of point.  aP
+    mul(a) {
+        a = this.ec.gfn.field(a);
+        if (a == 0n)
+            throw Error("mul by zero");
+
+        let N = this;
+        let Q = null;
+
+        while (a > 0n) {
+            if ((a % 2n) == 1n) {
+                Q = (Q == null) ? N : Q.add(N);
+            }
+            N = N.add(N);
+            a = a / 2n;
+        }
+        return Q;
+    }
+    div(a) {
+        a = this.ec.gfn.field(a);
+        return this.mul(this.ec.gfn.inv(a));
+    }
+    // P + Q
+    add(other) {
+        // handle P + 0 = P
+        if (other == null)
+            return this;
+
+        // check points are on same curve.
+        if (this.ec != other.ec)
+            throw Error("not on same curve");
+
+        if (this.x == other.x) {
+            if (this.y == other.y)
+                return this.double();
+
+            // Q = -P,  => P+Q = 0
+            return null;
+        }
+
+        // slope
+        let mx = this.ec.gfp.sub(other.x, this.x);
+        let my = this.ec.gfp.sub(other.y, this.y);
+        let m = this.ec.gfp.div(my, mx);
+
+        // xr = m^2 - xp - xq
+        // yr = m * (xp - xr) - yp
+        let x = this.ec.gfp.sub(this.ec.gfp.sub(this.ec.gfp.mul(m, m), this.x), other.x);
+        let y = this.ec.gfp.sub(this.ec.gfp.mul(m, this.ec.gfp.sub(this.x, x)), this.y);
+
+        return new Point(this.ec, x, y);
+    }
+    // P + P
+    double() {
+        // 2(x,y) = 0 when y = 0
+        if (this.y == 0n)
+            return null;
+
+        // m = (3x^2+a) / 2y
+        let a = this.ec.a;
+        let mny = this.ec.gfp.mul(this.ec.gfp.mul(3n, this.x), this.x);
+        mny = this.ec.gfp.add(mny, a);
+        let mdy = this.ec.gfp.mul(2n, this.y);
+        let m = this.ec.gfp.div(mny, mdy);
+
+        // xr = m^2 - 2 * xp
+        // yr = m * (xp - xr) - yp
+        let x = this.ec.gfp.sub(this.ec.gfp.mul(m, m), this.ec.gfp.mul(2n, this.x));
+        let y = this.ec.gfp.sub(this.ec.gfp.mul(m, this.ec.gfp.sub(this.x, x)), this.y);
+
+        return new Point(this.ec, x, y);
+    }
+}
+/* ecdsa.js */
+// ecdsa operations
+'use strict';
+
+class ECDSA {
+    constructor(ec) {
+        this.ec = ec;
+    }
+
+    // sign a message
+    // m - messagehash
+    // x - private key
+    // k - signing secret
+    //
+    // result: (r, s) - the signature
+    sign(m, x, k) {
+        // R = k*G  = (xr, yr)
+        m = this.ec.scalar(m);
+        x = this.ec.scalar(x);
+        k = this.ec.scalar(k);
+
+        if (k == 0n || k.uint() >= this.ec.n)
+            throw Error(`invalid k: ${k}`);
+
+        // note: crypto libraries like openssl will fail with k's of lower bit settings.
+        // e.g. openssl will return an error for nonces with less than 4 bits set (see BN_num_bits)
+        // we don't care about that in this demo.
+        let R = this.ec.G.mul(k);
+
+        // r = xr
+        let r = this.ec.scalar(R.x);
+
+        // s = (m+r*x)/k
+        let s = this.ec.scalar(this.ec.gfn.add(m.uint(), this.ec.gfn.mul(r.uint(), x.uint())));
+        s = this.ec.scalar(this.ec.gfn.div(s.uint(), k.uint()));
+
+        return [r, s];
+    }
+
+    // verify a message
+    // m - messagehash
+    // Y - public key
+    // r, s - signature
+    //
+    // returns: boolean
+    verify(m, Y, r, s) {
+        m = this.ec.scalar(m);
+        r = this.ec.scalar(r);
+        s = this.ec.scalar(s);
+
+        let sinv = this.ec.scalar(this.ec.gfn.inv(s.uint()));
+
+        let u1 = this.ec.scalar(this.ec.gfn.mul(m.uint(), sinv.uint()));
+        let u2 = this.ec.scalar(this.ec.gfn.mul(r.uint(), sinv.uint()));
+
+        let Rp = this.ec.G.mul(u1.uint()).add(Y.mul(u2.uint()));
+        if (Rp == null)
+            return false;
+
+        let rp = this.ec.scalar(Rp.x);
+
+        return rp.uint() == r.uint();
+    }
+
+    // find possible public key, given the signature (r,s) of message hash 'm'.
+    //
+    // note that there two possible public keys which will  verify a signature,
+    // the caller needs to figure out which one is needed.
+    //
+    // kparity: 0 or 1 to pick one of the two solutions.
+    findpk(m, r, s, kparity) {
+        m = this.ec.scalar(m);
+        r = this.ec.scalar(r);
+        s = this.ec.scalar(s);
+
+        // from publickey Y, messaga m, r, s
+        //
+        // s = (m + x*r) / k   ...(1)
+        // r = x coord of (k*G)
+        // => r*s = r*(m + x*r) / k
+        // => r*s = r*m/k + r*r*x/k
+        // => r*s = r*m/k + x*r^2/k
+        // => r*s*k = r*m + x*r^2
+        // => r*s*k - r*m = x*r^2
+        // => (r*s*k - r*m)/r^2 = x
+        // => (s*k - m)/r = x
+        //
+        // r = G*k, => k is the scalar for which x coord of k*G is r
+        // since r is x-coord, there are two possible y-coords, we try both options here.
+        //
+        // k = parity ? -k : k
+
+        // first, find the two possible G*k
+        let R;
+        try {
+            R = this.ec.decompress(r.uint(), kparity);
+        }
+        catch (err) {
+            // we get an error when r is not the result of a scalar mul of G.
+            // in a valid signature this should be possible
+            throw Error(`invalid r: ${r}`);
+        }
+
+        // second, find k, such that R = k * G
+        //
+        // we need to find k in Fn, in Fn we have z*G = O for z multiple of n.
+        // => (z*n + k)*G = k*G
+        // => finding one k' such that k'*G = R is enough.
+        // => all other solutions are of the form (z*n + k')
+        // => just pick one, k=k' is fine for our algorithm
+        //
+        // verification of the signature will ensure we get a valid key,
+        // don't need to worry about multiple solutions here.
+        //
+        // the usual  k'*G = R,  => k' = R/G.
+        // but that requires calculating the discrete log, which is too hard.
+        //
+        // we pick the solution where k = (s^-1)(m + x*r), which we get from rewriting equation (1) above.
+
+        // now, calculate Y from those values:
+        // Y = (R*s - G*m) / r
+        // = (R*s - G*m) * r^-1
+        let sinv = this.ec.scalar(this.ec.gfn.div(s.uint(), this.ec.n));
+        let rinv = this.ec.scalar(this.ec.gfn.div(r.uint(), this.ec.n));
+        let u1 = this.ec.G.mul(m.uint());
+        let u2 = R.mul(s.uint());
+
+        // find Y, such that R*s = G*m + Y*r
+        // Y*r = R*s - G*m
+        // Y = (R*s - G*m) / r
+        let Y;
+        if (u1.x == u2.x && u1.y == u2.y)
+            Y = null;  // G*m + Y*r = G*m,  => Y*r = O => Y = O
+        else if (u1.x == u2.x)
+            throw Error("something went wrong calculating pk");
+        else {
+            // negate u1:  G*m + Y*r = R*s  => Y*r = R*s - G*m
+            let p = u2.add(this.ec.point(u1.x, this.ec.gfp.neg(u1.y)));
+            // Y*r = p => Y = p/r
+            Y = p.div(r.uint());
+        }
+
+        return Y;
+    }
+
+    // given a signature (r,s) for message hash m, and private key x
+    // calculate which signing secret was used.
+    //
+    // note that this is the reverse of 'sign'
+    findk(m, x, r, s) {
+        // s = (m + x*r) / k, =>  k = (m + x*r) / s
+        m = this.ec.scalar(m);
+        r = this.ec.scalar(r);
+        s = this.ec.scalar(s);
+        x = this.ec.scalar(x);
+
+        let mxr = this.ec.gfn.add(m.uint(), this.ec.gfn.mul(x.uint(), r.uint()));
+        let k = this.ec.gfn.div(mxr, s.uint());
+
+        return this.ec.scalar(k);
+    }
+
+    // crack a private key, given message hash m, signature (r,s) and signing secret k.
+    crack1(k, m, s) {
+        // s = (m + x*r) / k,  =>  x = (s*k - m) / r
+        m = this.ec.scalar(m);
+        s = this.ec.scalar(s);
+        k = this.ec.scalar(k);
+
+        let R = this.ec.G.mul(k.uint());
+        let r = this.ec.scalar(R.x);
+
+        let sk = this.ec.gfn.mul(s.uint(), k.uint());
+        let skm = this.ec.gfn.sub(sk, m.uint());
+        let x = this.ec.gfn.div(skm, r.uint());
+
+        return this.ec.scalar(x);
+    }
+
+    // crack a private key, given two different signatures that used the same signing
+    // secret k. ((r1,s1), (r2,s2)) for message hashes (m1, m2)
+    crack2(r, m1, m2, s1, s2) {
+        r = this.ec.scalar(r);
+        m1 = this.ec.scalar(m1);
+        m2 = this.ec.scalar(m2);
+        s1 = this.ec.scalar(s1);
+        s2 = this.ec.scalar(s2);
+
+        // s1 = (m1 + x*r) / k,
+        // s2 = (m2 + x*r) / k,
+        //  => k = (m1 - m2) / (s1 - s2)
+        let mdiff = this.ec.gfn.sub(m1.uint(), m2.uint());
+        let sdiff = this.ec.gfn.sub(s1.uint(), s2.uint());
+        let k = this.ec.gfn.div(mdiff, sdiff);
+
+        // s1 = (m1 + x*r) / k,
+        // k * s1 = m1 + x*r,
+        // x*r = k*s1 - m1, => x = (k*s1 - m1) / r
+
+        let ks1 = this.ec.gfn.mul(k, s1.uint());
+        let ks1m1 = this.ec.gfn.sub(ks1, m1.uint());
+        let x = this.ec.gfn.div(ks1m1, r.uint());
+
+        return [this.ec.scalar(k), this.ec.scalar(x)];
+    }
+}
+/* utils.js */
+'use strict';
+/* bccurve.js */
+'use strict';
+
+// field operations on the specific curve used in bitcoin.
+// y^2 = x^3 + 7
+//
+// in bitcoin secp256k1 is used:
+//
+// p = FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F = 2^256 - 2^32 - 977
+// n = FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141
+// a = 0
+// b = 7
+// G = (79,50), where
+//   Gx = 79BE667E F9DCBBAC 55A06295 CE870B07 029BFCDB 2DCE28D9 59F2815B 16F81798
+//   Gy = 483ADA77 26A3C465 5DA4FBFC 0E1108A8 FD17B448 A6855419 9C47D08F FB10D4B8
+
+class Coord {
+    constructor(field, value) {
+        this.field = field;
+        if (typeof value == 'string' && (value.startsWith("0x") || /^[0-9a-f]+$/.test(value)))
+            value = BigInt(value.startsWith("0x") ? value : "0x" + value);
+        else if (typeof value == 'number')
+            value = BigInt(value);
+        else if (value instanceof Coord)
+            value = value.uint();
+        this.value = field.field(value);
+    }
+    uint() {
+        return this.value;
+    }
+}
+
+class Secp256K1EC extends EC {
+    constructor(p, n) {
+        super();
+        this.p = p;
+        this.n = n;
+
+        this.gfp = new GFp(this.p);
+        this.gfn = new GFp(this.n);
+
+        this.a = 0n;
+        this.b = 7n;
+
+        this.G = this.point(
+            0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n,
+            0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n
+        );
+    }
+    coord(x) {
+        return new Coord(this.gfp, x);
+    }
+    scalar(x) {
+        return new Coord(this.gfn, x);
+    }
+
+    // calculate y^^2 from x:  y2 = x^3 + a*x + b;
+    calculate_y2(x) {
+        x = this.gfp.field(x);
+
+        // y2 = x^3 + a*x + b
+        let y2 = this.gfp.mul(this.gfp.mul(x, x), x);  // x^3
+
+        // y2 += a*x
+        y2 = this.gfp.add(y2, this.gfp.mul(this.a, x));
+
+        // y2 += b
+        y2 = this.gfp.add(y2, this.b);
+
+        return y2;
+    }
+
+    calcpub(x) {
+        x = this.scalar(x);
+        return this.G.mul(x.uint());
+    }
+    sign(m, x, k) {
+        return (new ECDSA(this)).sign(m, x, k);
+    }
+    verify(m, Y, r, s) {
+        return (new ECDSA(this)).verify(m, Y, r, s);
+    }
+    findpk(m, r, s, kparity) {
+        return (new ECDSA(this)).findpk(m, r, s, kparity);
+    }
+    findk(m, x, r, s) {
+        return (new ECDSA(this)).findk(m, x, r, s);
+    }
+    crack1(k, m, s) {
+        return (new ECDSA(this)).crack1(k, m, s);
+    }
+    crack2(r, m1, m2, s1, s2) {
+        return (new ECDSA(this)).crack2(r, m1, m2, s1, s2);
+    }
+}
+
+function secp256k1() {
+    return new Secp256K1EC(
+        // p
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn,
+        // n
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n
+    );
+}
+
+/* Main Page Script */
+'use strict';
+
+var example = {
+    k:  "bc614e",
+    x:  "51c4dba2c28fc89b208550477a514c87f9d0db0354f03b7c61f08c0a0e3118a2",
+
+    px: "bb6c1de01f36618ae05f7c183c22dfa8797e779f39537752c27e2dc045b0e694",
+    py: "2f8af53270bf045f2258834b6dad7481ad6fca009d80f5b54697b08d104fc7b3",
+
+    r:  "cabc3692f1f7ba75a8572dc5d270b35bcc00650534f6e5ecd6338e55355454d5",
+    s1: "f65bfc44435a91814c142a3b8ee288a9183e6a3f012b84545d1fe334ccfac25e",
+    m1: "9b076ad2fe6b2ce63acf4edf7fc82d5152d3c8bffb36b944da7a1cce038f544a",
+
+    s2: "9cae782a191f3e742d9d4ff8f726d097a3a256af9fbc1faf16e7ec4d9fcf6feb",
+    m2: "85e43d48a83d8713a0fe253bf6b1fc70b8ee780e54749dc500f2880b056c4383",
+};
+var B = secp256k1();
+
+function setvalue(id, value)
+{
+    var av = document.getElementById(id); 
+    av.innerHTML = value;
+}
+function getnumber(id)
+{
+    var av = document.getElementById(id); 
+    if (!av)
+        throw "invalid selector";
+    var val = av.value;
+    if (!val)
+        return B.scalar(BigInt(0));
+    if (!val.startsWith("0x"))
+        val = "0x" + val;
+    return B.scalar(BigInt(val));
+}
+
+function load_crack2()
+{
+    document.getElementById("crack2_r").value = example.r;
+    document.getElementById("crack2_m1").value = example.m1;
+    document.getElementById("crack2_s1").value = example.s1;
+    document.getElementById("crack2_m2").value = example.m2;
+    document.getElementById("crack2_s2").value = example.s2;
+}
+
+function do_crack2()
+{
+    var r = getnumber("crack2_r");
+    var m1 = getnumber("crack2_m1");
+    var m2 = getnumber("crack2_m2");
+    var s1 = getnumber("crack2_s1");
+    var s2 = getnumber("crack2_s2");
+
+    var [k, x] = B.crack2(r, m1, m2, s1, s2);
+    setvalue("crack2_k", k.uint().toString(16));
+    setvalue("crack2_x", x.uint().toString(16));
+}
+
+function load_crack1()
+{
+    document.getElementById("crack1_k").value = example.k;
+    document.getElementById("crack1_s").value = example.s1;
+    document.getElementById("crack1_m").value = example.m1;
+}
+
+function do_crack1()
+{
+    var k = getnumber("crack1_k");
+    var m = getnumber("crack1_m");
+    var s = getnumber("crack1_s");
+
+    var x = B.crack1(k, m, s);
+    setvalue("crack1_x", x.uint().toString(16));
+}
+
+function load_calcpub()
+{
+    document.getElementById("calcpub_x").value = example.x;
+}
+
+function do_calcpub()
+{
+    var x = getnumber("calcpub_x");
+    var Y = B.calcpub(x);
+    setvalue("calcpub_px", Y.x.uint().toString(16));
+    setvalue("calcpub_py", Y.y.uint().toString(16));
+}
+
+function load_calcsig()
+{
+    document.getElementById("calcsig_k").value = example.k;
+    document.getElementById("calcsig_x").value = example.x;
+    document.getElementById("calcsig_m").value = example.m1;
+}
+function do_calcsig()
+{
+    var x = getnumber("calcsig_x");
+    var k = getnumber("calcsig_k");
+    var m = getnumber("calcsig_m");
+
+    var [r, s] = B.sign(m, x, k);
+    setvalue("calcsig_r", r.uint().toString(16));
+    setvalue("calcsig_s", s.uint().toString(16));
+}
+
+function load_verifysig()
+{
+    document.getElementById("verifysig_m").value = example.m1;
+    document.getElementById("verifysig_r").value = example.r;
+    document.getElementById("verifysig_s").value = example.s1;
+    document.getElementById("verifysig_px").value = example.px;
+    document.getElementById("verifysig_py").value = example.py;
+}
+function do_verifysig()
+{
+    var r = getnumber("verifysig_r");
+    var s = getnumber("verifysig_s");
+    var m = getnumber("verifysig_m");
+    var px = getnumber("verifysig_px");
+    var py = getnumber("verifysig_py");
+
+    var Y = B.ec.point(px, py);
+    var ok = B.verify(m, Y, r, s);
+    setvalue("verifysig_result", ok ? "ok" : "invalid");
+}
+function load_findpk()
+{
+    document.getElementById("findpk_m").value = example.m1;
+    document.getElementById("findpk_r").value = example.r;
+    document.getElementById("findpk_s").value = example.s1;
+}
+function do_findpk()
+{
+    var m = getnumber("findpk_m");
+    var r = getnumber("findpk_r");
+    var s = getnumber("findpk_s");
+
+    var Y = B.findpk(m, r, s, 0);
+    setvalue("findpk_px0", Y.x.uint().toString(16));
+    setvalue("findpk_py0", Y.y.uint().toString(16));
+
+    var Y = B.findpk(m, r, s, 1);
+    setvalue("findpk_px1", Y.x.uint().toString(16));
+    setvalue("findpk_py1", Y.y.uint().toString(16));
+}
+function load_findk()
+{
+    document.getElementById("findk_x").value = example.x;
+    document.getElementById("findk_m").value = example.m1;
+    document.getElementById("findk_r").value = example.r;
+    document.getElementById("findk_s").value = example.s1;
+}
+function do_findk()
+{
+    var x = getnumber("findk_x");
+    var m = getnumber("findk_m");
+    var r = getnumber("findk_r");
+    var s = getnumber("findk_s");
+
+    var k = B.findk(m, x, r, s);
+    setvalue("findk_k", k.uint().toString(16));
+}
+
+// Load examples on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load example data into form fields
+    load_crack2();
+    load_crack1();
+    load_calcpub();
+    load_calcsig();
+    load_verifysig();
+    load_findpk();
+    load_findk();
+});
+    </script>
+</body>
+</html>

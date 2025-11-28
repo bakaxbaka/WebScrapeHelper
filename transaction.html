@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-exchange-alt"></i> Transaction Analysis</h2>
+        <p>Enter a Bitcoin transaction ID to analyze its signatures and cryptographic values.</p>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form id="tx-analysis-form">
+                    <div class="mb-3">
+                        <label for="tx-id" class="form-label">Transaction ID</label>
+                        <input type="text" class="form-control" id="tx-id" 
+                               placeholder="Enter transaction ID (64 characters)" required
+                               pattern="[a-fA-F0-9]{64}">
+                        <div class="invalid-feedback">
+                            Please enter a valid transaction ID (64 hexadecimal characters)
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Analyze
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div id="analysis-loading" class="text-center d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Analyzing transaction...</p>
+        </div>
+
+        <div id="analysis-results" class="d-none">
+            <h3>Analysis Results</h3>
+
+            <!-- ECDSA Parameters -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>ECDSA Parameters</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Curve Parameters</h5>
+                            <p><strong>p (Field Order):</strong> <span id="param-p" class="text-monospace"></span></p>
+                            <p><strong>G (Generator Point):</strong></p>
+                            <p class="ms-3">x: <span id="param-gx" class="text-monospace"></span></p>
+                            <p class="ms-3">y: <span id="param-gy" class="text-monospace"></span></p>
+                            <p><strong>n (Curve Order):</strong> <span id="param-n" class="text-monospace"></span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Transaction Values</h5>
+                            <p><strong>Message Hash (m):</strong> <span id="param-m" class="text-monospace"></span></p>
+                            <p><strong>Public Key (Y):</strong></p>
+                            <p class="ms-3">px: <span id="param-px" class="text-monospace"></span></p>
+                            <p class="ms-3">py: <span id="param-py" class="text-monospace"></span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signature Analysis -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Signature Analysis</h4>
+                </div>
+                <div class="card-body">
+                    <div class="results-summary">
+                        <p><strong>Transaction ID:</strong> <span id="result-txid"></span></p>
+                        <p><strong>Signatures Analyzed:</strong> <span id="result-sigs"></span></p>
+                        <p><strong>Weak Signatures Found:</strong> <span id="result-weak"></span></p>
+                        <p><strong>Private Keys Recovered:</strong> <span id="result-keys"></span></p>
+                    </div>
+
+                    <div id="weak-signatures" class="mt-4">
+                        <h5>Weak Signatures</h5>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Details</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="weak-sigs-table">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="recovered-keys" class="mt-4 d-none">
+                        <h5>Recovered Keys</h5>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> Warning: Handle private keys with extreme caution.
+                            Never share them with anyone.
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Private Key (x)</th>
+                                        <th>Signing Secret (k)</th>
+                                        <th>Format</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="private-keys-table">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="analysis-error" class="alert alert-danger d-none">
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin ECDSA Analyzer - Standalone</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .curve-params {
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .input-group-text {
+            min-width: 120px;
+        }
+        .signature-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .result-box {
+            background-color: #f0f8ff;
+            border: 1px solid #b8daff;
+            border-radius: 0.25rem;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .nav-tabs .nav-link {
+            cursor: pointer;
+        }
+        .hexvalue {
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .form-control-monospace {
+            font-family: monospace;
+        }
+        .section-header {
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Bitcoin ECDSA Analyzer</h1>
+        <p class="text-center mb-4">Standalone calculator for ECDSA signature analysis and private key recovery</p>
+
+        <ul class="nav nav-tabs mb-4" id="analysisTabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="simple-tab" data-bs-toggle="tab" href="#simple" role="tab">Simple Analysis</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="advanced-tab" data-bs-toggle="tab" href="#advanced" role="tab">Advanced Analysis</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="curve-tab" data-bs-toggle="tab" href="#curve" role="tab">Curve Parameters</a>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="analysisTabsContent">
+            <!-- Simple Analysis Tab -->
+            <div class="tab-pane fade show active" id="simple" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>ECDSA Analysis for Two Signatures</h4>
+                    </div>
+                    <div class="card-body">
+                        <form id="ecdsa-form">
+                            <div class="mb-3">
+                                <h5 class="section-header">First Signature</h5>
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <span class="input-group-text">r1 (hex)</span>
+                                            <input type="text" class="form-control form-control-monospace" id="r1" placeholder="r value in hex">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <span class="input-group-text">s1 (hex)</span>
+                                            <input type="text" class="form-control form-control-monospace" id="s1" placeholder="s value in hex">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text">z1 (hex)</span>
+                                    <input type="text" class="form-control form-control-monospace" id="m1" placeholder="message hash z in hex">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <h5 class="section-header">Second Signature</h5>
+                                <div class="row mb-2">
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <span class="input-group-text">r2 (hex)</span>
+                                            <input type="text" class="form-control form-control-monospace" id="r2" placeholder="r value in hex">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <span class="input-group-text">s2 (hex)</span>
+                                            <input type="text" class="form-control form-control-monospace" id="s2" placeholder="s value in hex">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text">z2 (hex)</span>
+                                    <input type="text" class="form-control form-control-monospace" id="m2" placeholder="message hash z in hex">
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-primary" id="analyze-btn">
+                                <i class="fas fa-calculator"></i> Perform Analysis
+                            </button>
+                        </form>
+
+                        <div id="analysis-results" class="mt-4 d-none">
+                            <h5 class="section-header">Analysis Results</h5>
+
+                            <div class="mb-3">
+                                <h6>Signing Secret Recovery:</h6>
+                                <div class="input-group">
+                                    <span class="input-group-text">k = (m1-m2)/(s1-s2) mod n</span>
+                                    <input type="text" class="form-control form-control-monospace" id="k-value" readonly>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6>Private Key Recovery:</h6>
+                                <div class="input-group">
+                                    <span class="input-group-text">x = (s*k-m)/r mod n</span>
+                                    <input type="text" class="form-control form-control-monospace" id="x-value" readonly>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <h6>Public Key Calculation:</h6>
+                                <div class="input-group mb-2">
+                                    <span class="input-group-text">Y = G * x (x-coord)</span>
+                                    <input type="text" class="form-control form-control-monospace" id="pubkey-x" readonly>
+                                </div>
+                                <div class="input-group">
+                                    <span class="input-group-text">Y = G * x (y-coord)</span>
+                                    <input type="text" class="form-control form-control-monospace" id="pubkey-y" readonly>
+                                </div>
+                                <div class="form-text mt-2">
+                                    <span id="point-valid"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Analysis Tab -->
+            <div class="tab-pane fade" id="advanced" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Advanced ECDSA Verification</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h5 class="section-header">Signature Creation</h5>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">r = xcoord(G*k)</span>
+                                <input type="text" class="form-control form-control-monospace" id="sig-r-creation" placeholder="Enter or calculated r value">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">s = (m+x*r)/k</span>
+                                <input type="text" class="form-control form-control-monospace" id="sig-s-creation" placeholder="Enter or calculated s value">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="verify-sig-creation">Verify Creation</button>
+                            <div id="sig-creation-result" class="form-text mt-2"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h5 class="section-header">Signature Verification</h5>
+                            <div class="input-group">
+                                <span class="input-group-text">G*m + Y*r == R*s</span>
+                                <input type="text" class="form-control form-control-monospace" id="sig-verification" placeholder="Result of verification calculation">
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="verify-signature">Verify</button>
+                            <div id="sig-verification-result" class="form-text mt-2"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h5 class="section-header">Public Key Recovery</h5>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">Y = (R*s - G*m)/r (x)</span>
+                                <input type="text" class="form-control form-control-monospace" id="recovered-pubkey-x" placeholder="X coordinate of recovered public key">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">Y = (R*s - G*m)/r (y)</span>
+                                <input type="text" class="form-control form-control-monospace" id="recovered-pubkey-y" placeholder="Y coordinate of recovered public key">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="recover-pubkey">Recover Public Key</button>
+                            <div id="pubkey-recovery-result" class="form-text mt-2"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h5 class="section-header">Point Validation</h5>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text">y² = x³ + 7 (x)</span>
+                                <input type="text" class="form-control form-control-monospace" id="point-x" placeholder="X coordinate to validate">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text">y² = x³ + 7 (y)</span>
+                                <input type="text" class="form-control form-control-monospace" id="point-y" placeholder="Y coordinate to validate">
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="validate-point">Validate Point</button>
+                            <div id="point-validation-result" class="form-text mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Curve Parameters Tab -->
+            <div class="tab-pane fade" id="curve" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Secp256k1 Curve Parameters</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="curve-params" id="curve-parameters">
+                            Loading curve parameters...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Bitcoin ECDSA Scripts -->
+    <script>
+        // BigInteger implementation
+        function bigInt(val) {
+            return BigInt(typeof val === 'string' && val.startsWith('0x') ? val : '0x' + val);
+        }
+
+        // Convert to hex representation
+        function toHex(num, padLength = 64) {
+            let hex = (typeof num === 'bigint' ? num : BigInt(num)).toString(16);
+            return hex.padStart(padLength, '0');
+        }
+
+        // Modular inverse computation using extended Euclidean algorithm
+        function modInv(a, m) {
+            a = ((a % m) + m) % m;
+            if (a === 0n) throw new Error("Modular inverse does not exist");
+
+            let [old_r, r] = [a, m];
+            let [old_s, s] = [1n, 0n];
+            let [old_t, t] = [0n, 1n];
+
+            while (r !== 0n) {
+                const quotient = old_r / r;
+                [old_r, r] = [r, old_r - quotient * r];
+                [old_s, s] = [s, old_s - quotient * s];
+                [old_t, t] = [t, old_t - quotient * t];
+            }
+
+            if (old_r !== 1n) throw new Error("Modular inverse does not exist");
+            return ((old_s % m) + m) % m;
+        }
+
+        // ECDSA curve class for secp256k1
+        class Secp256k1 {
+            constructor() {
+                // Curve parameters for secp256k1
+                this.p = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F');
+                this.a = 0n;
+                this.b = 7n;
+                this.n = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+                this.Gx = BigInt('0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798');
+                this.Gy = BigInt('0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8');
+                this.h = 1n;
+            }
+
+            // Modular addition
+            add(a, b) {
+                return (a + b) % this.p;
+            }
+
+            // Modular subtraction
+            sub(a, b) {
+                return ((a - b) % this.p + this.p) % this.p;
+            }
+
+            // Modular multiplication
+            mul(a, b) {
+                return (a * b) % this.p;
+            }
+
+            // Modular division
+            div(a, b) {
+                return this.mul(a, modInv(b, this.p));
+            }
+
+            // Modular exponentiation
+            pow(base, exponent) {
+                let result = 1n;
+                base = base % this.p;
+
+                while (exponent > 0n) {
+                    if (exponent & 1n) {
+                        result = this.mul(result, base);
+                    }
+                    exponent >>= 1n;
+                    base = this.mul(base, base);
+                }
+
+                return result;
+            }
+
+            // Check if point is on curve y^2 = x^3 + ax + b
+            isOnCurve(x, y) {
+                const left = this.pow(y, 2n);
+                const right = this.add(this.add(this.pow(x, 3n), this.mul(this.a, x)), this.b);
+                return left === right;
+            }
+
+            // Point addition on the curve
+            pointAdd(P, Q) {
+                if (P === null) return Q;
+                if (Q === null) return P;
+
+                const [x1, y1] = P;
+                const [x2, y2] = Q;
+
+                if (x1 === x2 && y1 !== y2) return null; // Point at infinity
+
+                let m;
+                if (x1 === x2) {
+                    // Point doubling
+                    const numerator = this.add(this.mul(3n, this.pow(x1, 2n)), this.a);
+                    const denominator = this.mul(2n, y1);
+                    m = this.div(numerator, denominator);
+                } else {
+                    // Point addition
+                    const numerator = this.sub(y2, y1);
+                    const denominator = this.sub(x2, x1);
+                    m = this.div(numerator, denominator);
+                }
+
+                const x3 = this.sub(this.sub(this.pow(m, 2n), x1), x2);
+                const y3 = this.sub(this.mul(m, this.sub(x1, x3)), y1);
+
+                return [x3, y3];
+            }
+
+            // Scalar multiplication: k * P
+            pointMul(k, P = [this.Gx, this.Gy]) {
+                k = k % this.n;
+                let result = null;
+                let addend = P;
+
+                while (k > 0n) {
+                    if (k & 1n) {
+                        result = this.pointAdd(result, addend);
+                    }
+                    addend = this.pointAdd(addend, addend);
+                    k >>= 1n;
+                }
+
+                return result;
+            }
+
+            // Generate public key from private key
+            publicKeyFromPrivate(privateKey) {
+                return this.pointMul(BigInt(privateKey));
+            }
+
+            // Format parameters for display
+            formatParameters() {
+                return {
+                    p: toHex(this.p),
+                    a: toHex(this.a),
+                    b: toHex(this.b),
+                    n: toHex(this.n),
+                    Gx: toHex(this.Gx),
+                    Gy: toHex(this.Gy),
+                    h: toHex(this.h, 2)
+                };
+            }
+        }
+
+        // Initialize the curve
+        const curve = new Secp256k1();
+
+        // Utility functions for analysis
+        function performECDSAAnalysis() {
+            try {
+                // Get values from form
+                const r1 = bigInt(document.getElementById('r1').value);
+                const s1 = bigInt(document.getElementById('s1').value);
+                const m1 = bigInt(document.getElementById('m1').value);
+                const r2 = bigInt(document.getElementById('r2').value);
+                const s2 = bigInt(document.getElementById('s2').value);
+                const m2 = bigInt(document.getElementById('m2').value);
+
+                // Calculate signature nonce k = (m1-m2)/(s1-s2) mod n
+                const m1_minus_m2 = ((m1 - m2) % curve.n + curve.n) % curve.n;
+                const s1_minus_s2 = ((s1 - s2) % curve.n + curve.n) % curve.n;
+                const s1_minus_s2_inv = modInv(s1_minus_s2, curve.n);
+                const k = (m1_minus_m2 * s1_minus_s2_inv) % curve.n;
+
+                // Calculate private key x = (s*k - m)/r mod n
+                const r1_inv = modInv(r1, curve.n);
+                const privateKey = ((s1 * k - m1) * r1_inv) % curve.n;
+
+                // Calculate public key Y = G * x
+                const publicKey = curve.pointMul(privateKey);
+
+                // Display results
+                document.getElementById('k-value').value = toHex(k);
+                document.getElementById('x-value').value = toHex(privateKey);
+
+                if (publicKey) {
+                    document.getElementById('pubkey-x').value = toHex(publicKey[0]);
+                    document.getElementById('pubkey-y').value = toHex(publicKey[1]);
+
+                    // Validate that the point is on the curve
+                    const isValid = curve.isOnCurve(publicKey[0], publicKey[1]);
+                    document.getElementById('point-valid').textContent = isValid ? 
+                        'Valid - Point is on the curve' : 'Invalid - Point is not on the curve';
+                    document.getElementById('point-valid').className = isValid ? 'text-success' : 'text-danger';
+                } else {
+                    document.getElementById('pubkey-x').value = 'Error calculating public key';
+                    document.getElementById('pubkey-y').value = 'Error calculating public key';
+                    document.getElementById('point-valid').textContent = 'Error validating point';
+                    document.getElementById('point-valid').className = 'text-danger';
+                }
+
+                // Show results
+                document.getElementById('analysis-results').classList.remove('d-none');
+
+            } catch (error) {
+                alert('Error in ECDSA analysis: ' + error.message);
+                console.error('ECDSA Analysis Error:', error);
+            }
+        }
+
+        function validatePoint() {
+            try {
+                const x = bigInt(document.getElementById('point-x').value);
+                const y = bigInt(document.getElementById('point-y').value);
+
+                const isValid = curve.isOnCurve(x, y);
+
+                document.getElementById('point-validation-result').textContent = isValid ? 
+                    'Valid - Point is on the curve' : 'Invalid - Point is not on the curve';
+                document.getElementById('point-validation-result').className = isValid ? 
+                    'text-success' : 'text-danger';
+            } catch (error) {
+                document.getElementById('point-validation-result').textContent = 'Error: ' + error.message;
+                document.getElementById('point-validation-result').className = 'text-danger';
+            }
+        }
+
+        // Display curve parameters
+        function displayCurveParameters() {
+            const params = curve.formatParameters();
+            let html = '<table class="table table-sm">';
+            html += '<tr><td>p (field prime):</td><td class="hexvalue">' + params.p + '</td></tr>';
+            html += '<tr><td>a (curve coefficient):</td><td class="hexvalue">' + params.a + '</td></tr>';
+            html += '<tr><td>b (curve coefficient):</td><td class="hexvalue">' + params.b + '</td></tr>';
+            html += '<tr><td>n (curve order):</td><td class="hexvalue">' + params.n + '</td></tr>';
+            html += '<tr><td>Gx (generator x):</td><td class="hexvalue">' + params.Gx + '</td></tr>';
+            html += '<tr><td>Gy (generator y):</td><td class="hexvalue">' + params.Gy + '</td></tr>';
+            html += '<tr><td>h (cofactor):</td><td class="hexvalue">' + params.h + '</td></tr>';
+            html += '</table>';
+
+            document.getElementById('curve-parameters').innerHTML = html;
+        }
+
+        // Initialize the page when loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Initializing standalone ECDSA calculator');
+
+            // Display curve parameters
+            displayCurveParameters();
+
+            // Setup event listeners
+            document.getElementById('analyze-btn').addEventListener('click', performECDSAAnalysis);
+            document.getElementById('validate-point').addEventListener('click', validatePoint);
+
+            // Example values for testing
+            document.getElementById('r1').value = '44204945cc167ecfa86001c8756caa1c28783e8ccc2c85853888cd79f99566d6';
+            document.getElementById('s1').value = '1a1a8b8c9f5f5f5c8c7c1a9e1d2c3a5a5c5c7c1a2e4a6c8a0c2e4a6c8a0e2e4';
+            document.getElementById('m1').value = '29f7720d5b4358c2b21e9240eb0d178fc40ce4d48b836f3bdc20d75d15a6879d';
+            document.getElementById('r2').value = '44204945cc167ecfa86001c8756caa1c28783e8ccc2c85853888cd79f99566d6';
+            document.getElementById('s2').value = '2e4a6c8a0c2e4a6c8a0e2e41a1a8b8c9f5f5f5c8c7c1a9e1d2c3a5a5c5c7c1a';
+            document.getElementById('m2').value = '1b7c91f9fa241b71300ddeb699e5cf9ee9852dc0f1f1ac3ab8c8ba9605205f6f';
+
+            console.log('Standalone ECDSA calculator initialized');
+        });
+    </script>
+</body>
+</html>
