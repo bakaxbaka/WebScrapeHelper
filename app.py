@@ -14,6 +14,14 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, template_folder='.', static_folder='static')
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_key_only")
 
+@app.after_request
+def add_cache_control(response):
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
 # Initialize BTC analyzer
 analyzer = BTCAnalyzer()
 

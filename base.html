@@ -55,22 +55,16 @@
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- Load cryptographic libraries only once to avoid conflicts -->
-    <script>
-        // Prevent duplicate loading with global flag
-        if (typeof window.bitcoinCryptoLoaded === 'undefined') {
-            window.bitcoinCryptoLoaded = true;
-            document.write('<script src="{{ url_for("static", filename="js/bignum.js") }}"><\/script>');
-            document.write('<script src="{{ url_for("static", filename="js/gfp.js") }}"><\/script>');
-            document.write('<script src="{{ url_for("static", filename="js/ec.js") }}"><\/script>');
-            document.write('<script src="{{ url_for("static", filename="js/bccurve.js") }}"><\/script>');
-            document.write('<script src="{{ url_for("static", filename="js/ecdsa.js") }}"><\/script>');
-        }
-    </script>
+    <!-- Cryptographic libraries -->
+    <script src="{{ url_for('static', filename='js/bignum.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/gfp.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/ec.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/bccurve.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/ecdsa.js') }}?v=2"></script>
     
     <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/validator.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/validator.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=2"></script>
 
     {% block extra_js %}{% endblock %}
 </body>

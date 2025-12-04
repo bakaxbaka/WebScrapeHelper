@@ -136,16 +136,23 @@ function initTransactionForm() {
     console.log('Transaction form initialized');
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        e.stopPropagation();
 
-        const txId = document.getElementById('tx-id').value;
+        const txId = document.getElementById('tx-id').value.trim();
         console.log('Analyzing transaction:', txId);
 
         if (!validateTransactionId(txId)) {
-            showError('transaction', 'Invalid transaction ID format');
-            return;
+            showError('analysis', 'Invalid transaction ID format');
+            return false;
         }
 
-        await analyzeTransaction(txId);
+        try {
+            await analyzeTransaction(txId);
+        } catch (error) {
+            console.error('Transaction analysis failed:', error);
+            showError('analysis', 'Analysis failed: ' + error.message);
+        }
+        return false;
     });
 }
 
@@ -173,8 +180,9 @@ function initAddressForm() {
 }
 
 async function analyzeTransaction(txId) {
+    console.log('Starting transaction analysis...', txId);
     showLoading('analysis');
-    hideError('transaction');
+    hideError('analysis');
 
     try {
         console.log('Sending transaction analysis request:', txId);
@@ -196,7 +204,7 @@ async function analyzeTransaction(txId) {
         displayTransactionResults(data);
     } catch (error) {
         console.error('Transaction analysis error:', error);
-        showError('transaction', error.message);
+        showError('analysis', error.message);
     } finally {
         hideLoading('analysis');
     }
