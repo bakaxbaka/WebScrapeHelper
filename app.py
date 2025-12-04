@@ -11,7 +11,7 @@ from attached_assets.utils import calculate_message_hash, format_hex
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, template_folder='.', static_folder='.')
+app = Flask(__name__, template_folder='.', static_folder='static')
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_key_only")
 
 # Initialize BTC analyzer

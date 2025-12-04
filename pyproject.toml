@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "aiohttp>=3.13.2",
     "base58>=2.1.1",
     "bech32>=1.2.0",
     "cryptography>=44.0.1",
