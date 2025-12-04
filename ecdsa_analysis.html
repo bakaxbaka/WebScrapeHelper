@@ -164,7 +164,7 @@
 
 {% block extra_js %}
 <!-- ECDSA Analyzer Script -->
-<script src="/static/ecdsa_analyzer.js"></script>
+<script src="{{ url_for('static', filename='js/ecdsa_analyzer.js') }}"></script>
 <script>
 // Additional function to validate if a point is on the curve
 function validatePointOnCurve(x, y) {

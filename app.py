@@ -150,7 +150,7 @@ def analyze_ecdsa():
                 nonce_reuse_sigs = None
                 
                 for sig in signatures:
-                    if sig.get('type') == 'nonce_reuse' and 'all_signatures' in sig:
+                    if sig.get('type') in ['nonce_reuse', 'reused_r'] and 'all_signatures' in sig:
                         all_sigs = sig['all_signatures']
                         if len(all_sigs) >= 2:
                             # Take first two signatures with same r value
