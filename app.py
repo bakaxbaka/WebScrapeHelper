@@ -45,7 +45,7 @@ def standalone_calculator():
 @app.route('/download-calculator')
 def download_calculator():
     logger.debug("Serving downloadable ECDSA calculator")
-    return send_file('static/ecdsa_standalone.html', 
+    return send_file('ecdsa_standalone.html', 
                      mimetype='text/html',
                      as_attachment=True,
                      download_name='bitcoin_ecdsa_calculator.html')

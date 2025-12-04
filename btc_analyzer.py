@@ -792,21 +792,6 @@ class BTCAnalyzer:
         except Exception as e:
             logger.debug(f"Signature verification failed: {e}")
             return False
-            signing_key = SigningKey.from_string(key_bytes, curve=self.curve)
-
-            # Verify the signature
-            message_hash = sig['message']
-            r = int(sig['r'], 16)
-            s = int(sig['s'], 16)
-
-            # Reconstruct the signature
-            sig_bytes = int_to_bytes(r) + int_to_bytes(s)
-
-            return signing_key.verify(sig_bytes, message_hash)
-
-        except Exception as e:
-            logger.warning(f"Failed to verify private key: {e}")
-            return False
 
     def _fetch_transaction(self, tx_id: str) -> Optional[Dict]:
         """Fetch transaction data from blockchain API"""
