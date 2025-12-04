@@ -1,15 +1,16 @@
 import os
 import logging
-import requests
 from flask import Flask, render_template, jsonify, request, send_file
 from btc_analyzer import BTCAnalyzer
 from attached_assets.validators import validate_transaction_id
 from attached_assets.address_list import ADDRESSES_TO_CHECK
-from attached_assets.utils import calculate_message_hash, format_hex
+from attached_assets.utils import calculate_message_hash, format_hex, load_requests
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+requests = load_requests(optional=True)
 
 app = Flask(__name__, template_folder='.', static_folder='.')
 app.secret_key = os.environ.get("SESSION_SECRET", "dev_key_only")

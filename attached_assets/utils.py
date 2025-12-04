@@ -79,3 +79,53 @@ def public_key_to_p2pkh_address(public_key_bytes: bytes, testnet: bool = False) 
     ripe_hash = hashlib.new("ripemd160", sha_hash).digest()
     prefix = b"\x6f" if testnet else b"\x00"
     return _base58_check_encode(prefix + ripe_hash)
+
+
+class RequestsUnavailable(ImportError):
+    """Raised when the optional ``requests`` dependency is missing."""
+
+
+class _RequestsFallback:
+    """Lightweight stub used when ``requests`` is not installed.
+
+    Any attribute access will raise a :class:`RequestsUnavailable` exception
+    with a clear installation hint, while still exposing an ``exceptions``
+    namespace compatible with code that catches ``requests.exceptions``.
+    """
+
+    class exceptions:  # type: ignore
+        RequestException = RequestsUnavailable
+
+    def __init__(self, message: str):
+        self._message = message
+
+    def __getattr__(self, name):  # pragma: no cover - trivial passthrough
+        raise RequestsUnavailable(self._message)
+
+
+def load_requests(optional: bool = False):
+    """Return the ``requests`` module or raise a helpful error.
+
+    Parameters
+    ----------
+    optional:
+        When ``True``, the function returns a fallback stub instead of
+        raising if the dependency is missing. This allows modules that only
+        reference ``requests`` for exception handling to import successfully
+        while still surfacing a descriptive error when network calls are
+        attempted.
+    """
+
+    try:
+        import requests  # type: ignore
+
+        return requests
+    except ImportError as exc:
+        message = (
+            "The 'requests' package is required for network operations. "
+            "Install it with 'pip install -r requirements.txt' or "
+            "'pip install requests'."
+        )
+        if optional:
+            return _RequestsFallback(message)
+        raise RequestsUnavailable(message) from exc

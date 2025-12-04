@@ -7,6 +7,7 @@ __all__ = [
     "bytes_to_int",
     "private_key_to_wif",
     "public_key_to_p2pkh_address",
+    "load_requests",
     "validate_transaction_id",
     "ADDRESSES_TO_CHECK",
 ]
@@ -18,6 +19,7 @@ from .utils import (
     bytes_to_int,
     private_key_to_wif,
     public_key_to_p2pkh_address,
+    load_requests,
 )
 from .validators import validate_transaction_id
 from .address_list import ADDRESSES_TO_CHECK

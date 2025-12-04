@@ -2,11 +2,11 @@
 #!/usr/bin/env python3
 import time
 import logging
-import requests
 import json
 from typing import Dict, List, Optional
 from btc_analyzer import BTCAnalyzer
 from attached_assets.address_list import ADDRESSES_TO_CHECK
+from attached_assets.utils import load_requests
 import threading
 import queue
 import random
@@ -24,6 +24,7 @@ class ContinuousScanner:
         self.found_weak_sigs = []
         self.scan_count = 0
         self.running = True
+        self._http = load_requests(optional=True)
         
     def scan_mempool_continuously(self):
         """Continuously scan Bitcoin mempool for weak signatures"""
@@ -32,7 +33,7 @@ class ContinuousScanner:
         while self.running:
             try:
                 # Get unconfirmed transactions
-                response = requests.get(
+                response = self._http.get(
                     'https://blockchain.info/unconfirmed-transactions?format=json',
                     timeout=10
                 )
@@ -74,13 +75,13 @@ class ContinuousScanner:
         while self.running:
             try:
                 # Get latest block
-                response = requests.get('https://blockchain.info/latestblock', timeout=10)
+                response = self._http.get('https://blockchain.info/latestblock', timeout=10)
                 if response.status_code == 200:
                     latest_block = response.json()
                     block_hash = latest_block.get('hash')
                     
                     # Get block transactions
-                    block_response = requests.get(
+                    block_response = self._http.get(
                         f'https://blockchain.info/rawblock/{block_hash}',
                         timeout=15
                     )

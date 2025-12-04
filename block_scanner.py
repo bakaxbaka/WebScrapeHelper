@@ -3,14 +3,13 @@
 """
 Bitcoin Block Scanner - Scans blocks for vulnerable ECDSA signatures and recovers private keys
 """
-import requests
 import logging
 import time
 import hashlib
 from typing import Dict, List, Optional, Tuple
 from btc_analyzer import BTCAnalyzer
 from attached_assets.blockchain_api import fetch_transaction, extract_signature_components
-from attached_assets.utils import private_key_to_wif, public_key_to_p2pkh_address
+from attached_assets.utils import load_requests, private_key_to_wif, public_key_to_p2pkh_address
 from ecdsa import SigningKey, SECP256k1
 
 # Configure logging
@@ -20,7 +19,8 @@ logger = logging.getLogger(__name__)
 class BlockScanner:
     def __init__(self):
         self.analyzer = BTCAnalyzer()
-        self.session = requests.Session()
+        self._http = load_requests()
+        self.session = self._http.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })

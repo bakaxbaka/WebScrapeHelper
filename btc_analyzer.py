@@ -1,9 +1,14 @@
 import logging
 import hashlib
 from typing import Dict, List, Optional, Tuple
-import requests
 from ecdsa import SECP256k1, SigningKey
-from attached_assets.utils import format_hex, calculate_message_hash, int_to_bytes, bytes_to_int
+from attached_assets.utils import (
+    format_hex,
+    calculate_message_hash,
+    int_to_bytes,
+    bytes_to_int,
+    load_requests,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -796,7 +801,8 @@ class BTCAnalyzer:
     def _fetch_transaction(self, tx_id: str) -> Optional[Dict]:
         """Fetch transaction data from blockchain API"""
         try:
-            response = requests.get(f"https://blockchain.info/rawtx/{tx_id}", timeout=10)
+            http = load_requests()
+            response = http.get(f"https://blockchain.info/rawtx/{tx_id}", timeout=10)
             if response.ok:
                 logger.debug(f"Successfully fetched transaction {tx_id}")
                 return response.json()
@@ -869,7 +875,8 @@ class BTCAnalyzer:
     def _fetch_address_transactions(self, address: str) -> List[Dict]:
         """Fetch address transactions from blockchain API"""
         try:
-            response = requests.get(f"https://blockchain.info/rawaddr/{address}", timeout=10)
+            http = load_requests()
+            response = http.get(f"https://blockchain.info/rawaddr/{address}", timeout=10)
             if response.ok:
                 data = response.json()
                 logger.debug(f"Successfully fetched {len(data.get('txs', []))} transactions for address {address}")
@@ -892,7 +899,6 @@ class BTCAnalyzer:
         try:
             from attached_assets.utils import private_key_to_wif, public_key_to_p2pkh_address
             from ecdsa import SigningKey, SECP256k1
-            import requests
             
             # Convert to WIF format
             wif = private_key_to_wif(private_key)
@@ -996,8 +1002,8 @@ class BTCAnalyzer:
         Check the Bitcoin balance of an address
         """
         try:
-            import requests
-            response = requests.get(f"https://blockchain.info/q/addressbalance/{address}")
+            http = load_requests()
+            response = http.get(f"https://blockchain.info/q/addressbalance/{address}")
             if response.status_code == 200:
                 balance_satoshis = int(response.text.strip())
                 balance_btc = balance_satoshis / 100000000  # Convert satoshis to BTC

@@ -2,11 +2,12 @@
 
 from typing import Dict, Optional
 
-import requests
+from .utils import load_requests
 
 
 def fetch_transaction(tx_id: str) -> Optional[Dict]:
     """Fetch raw transaction details from blockchain.info."""
+    requests = load_requests()
     try:
         response = requests.get(f"https://blockchain.info/rawtx/{tx_id}", timeout=15)
         if response.ok:
