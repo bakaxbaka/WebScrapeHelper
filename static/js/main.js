@@ -212,14 +212,15 @@ async function analyzeAddress(address) {
     showLoading('address');
     hideError('address');
 
+    const maxTxsEl = document.getElementById('btc-max-txs');
+    const maxTxs = maxTxsEl ? parseInt(maxTxsEl.value, 10) || 500 : 500;
+
     try {
-        console.log('Sending address analysis request:', address);
+        console.log('Sending address analysis request:', address, 'max_txs=', maxTxs);
         const response = await fetch('/api/analyze/address', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ address: address })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: address, max_txs: maxTxs })
         });
 
         const data = await response.json();
@@ -327,62 +328,189 @@ function displayAddressResults(data) {
         console.error('Results container not found');
         return;
     }
-
     results.classList.remove('d-none');
 
-    // Safe access to data properties
-    document.getElementById('result-address').textContent = data?.address || 'N/A';
-    const txsAnalyzed = data?.transactions_analyzed || 0;
-    const totalTxs = data?.total_transactions || txsAnalyzed;
-    document.getElementById('result-txs').textContent = totalTxs > 50 ? `${txsAnalyzed} (limited to first 50 of ${totalTxs})` : txsAnalyzed;
-    document.getElementById('result-weak').textContent = (data?.weak_signatures || []).length;
+    // Aggregate facts
+    setText('result-address', data?.address || 'N/A');
+    setText('result-total-txs', data?.total_tx_count ?? 0);
+    setText('result-txs-analyzed', data?.transactions_analyzed ?? 0);
+    setText('result-sigs-total', data?.signatures_total ?? 0);
+    setText('result-low-s', data?.low_s_count ?? 0);
+    setText('result-schnorr', data?.schnorr_count ?? 0);
+    setText('result-z-na', data?.z_unavailable ?? 0);
+    setText('result-elapsed', data?.elapsed_s ? `${(+data.elapsed_s).toFixed(1)} s` : '-');
 
-    const tableBody = document.getElementById('address-weak-sigs');
-    if (!tableBody) {
-        console.error('Weak signatures table not found');
-        return;
+    const sigsByType = data?.signatures_by_type || {};
+    const tBody = document.querySelector('#result-sigs-by-type tbody');
+    if (tBody) {
+        tBody.innerHTML = '';
+        const entries = Object.entries(sigsByType).sort((a, b) => b[1] - a[1]);
+        if (entries.length === 0) {
+            tBody.innerHTML = '<tr><td colspan="2" class="text-muted">no signatures parsed</td></tr>';
+        } else {
+            for (const [k, v] of entries) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="text-monospace">${escapeHtml(k)}</td><td class="text-end">${v}</td>`;
+                tBody.appendChild(row);
+            }
+        }
     }
 
-    tableBody.innerHTML = '';
-
-    if (data?.weak_signatures?.length > 0) {
-        data.weak_signatures.forEach(sig => {
+    // Recovered keys
+    const rKeys = data?.recovered_keys || [];
+    setText('recovered-keys-count', rKeys.length);
+    const rkCard = document.getElementById('recovered-keys-card');
+    if (rkCard) rkCard.classList.toggle('d-none', rKeys.length === 0);
+    const rkBody = document.getElementById('recovered-keys-body');
+    if (rkBody) {
+        rkBody.innerHTML = '';
+        for (const k of rKeys) {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td class="text-monospace">${sig?.tx_id || 'N/A'}</td>
-                <td><span class="badge bg-danger">${sig?.type || 'Unknown'}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-info" onclick="showSignatureDetails('${sig?.r || ''}', '${sig?.type || ''}', ${JSON.stringify(sig).replace(/"/g, '&quot;')})">
-                        <i class="fas fa-info-circle"></i> View Details
-                    </button>
-                </td>
+                <td class="text-monospace small">${escapeHtml(k.private_key_hex || '')}</td>
+                <td class="text-monospace small">${escapeHtml(k.wif_compressed || '')}<br/>${escapeHtml(k.wif_uncompressed || '')}</td>
+                <td class="text-monospace small">${escapeHtml(k.address_compressed || '')}<br/>${escapeHtml(k.address_uncompressed || '')}</td>
+                <td><span class="badge bg-warning text-dark">${escapeHtml(k.recovered_via || 'unknown')}</span></td>
             `;
-            tableBody.appendChild(row);
-        });
+            rkBody.appendChild(row);
+        }
+    }
+
+    // Reused-r groups (deduped view)
+    const groups = data?.reused_r_groups || [];
+    setText('reused-groups-count', groups.length);
+    const grBody = document.getElementById('reused-groups-body');
+    if (grBody) {
+        grBody.innerHTML = '';
+        for (const g of groups.slice(0, 100)) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-monospace small">${shortHex(g.r)}</td>
+                <td>${g.occurrences ?? '-'}</td>
+                <td>${g.unique_txs ?? '-'}</td>
+                <td class="text-monospace small">${(g.tx_sample || []).slice(0, 1).map(escapeHtml).join('')}</td>
+            `;
+            grBody.appendChild(row);
+        }
+        if (groups.length === 0) {
+            grBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
+        }
+    }
+
+    // Cross-tx reused-r
+    const crossTx = data?.cross_tx_reused_r || [];
+    setText('cross-tx-count', crossTx.length);
+    const ctxBody = document.getElementById('cross-tx-body');
+    if (ctxBody) {
+        ctxBody.innerHTML = '';
+        const slice = crossTx.slice(0, 200);
+        for (const p of slice) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-monospace small">${shortHex(p.r)}</td>
+                <td class="text-monospace small">${escapeHtml(p.tx_a || '')}</td>
+                <td>${p.vin_a ?? '-'}</td>
+                <td class="text-monospace small">${escapeHtml(p.tx_b || '')}</td>
+                <td>${p.vin_b ?? '-'}</td>
+                <td>${escapeHtml(p.script_type_a || '?')} / ${escapeHtml(p.script_type_b || '?')}</td>
+            `;
+            ctxBody.appendChild(row);
+        }
+        if (crossTx.length > 200) {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td colspan="6" class="text-muted">... and ${crossTx.length - 200} more cross-tx pairs</td>`;
+            ctxBody.appendChild(row);
+        }
+        if (crossTx.length === 0) {
+            ctxBody.innerHTML = '<tr><td colspan="6" class="text-muted">none</td></tr>';
+        }
+    }
+
+    // In-tx reused-r
+    const inTx = data?.in_tx_reused_r || [];
+    setText('in-tx-count', inTx.length);
+    const itxBody = document.getElementById('in-tx-body');
+    if (itxBody) {
+        itxBody.innerHTML = '';
+        for (const p of inTx) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-monospace small">${shortHex(p.r)}</td>
+                <td class="text-monospace small">${escapeHtml(p.txid || '')}</td>
+                <td>${p.vin_a ?? '-'} / ${p.vin_b ?? '-'}</td>
+                <td>${escapeHtml(p.script_type_a || '?')} / ${escapeHtml(p.script_type_b || '?')}</td>
+            `;
+            itxBody.appendChild(row);
+        }
+        if (inTx.length === 0) {
+            itxBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
+        }
+    }
+
+    // Biased-nonce candidates
+    const bias = data?.biased_nonce_candidates || [];
+    setText('bias-count', bias.length);
+    const biasBody = document.getElementById('bias-body');
+    if (biasBody) {
+        biasBody.innerHTML = '';
+        for (const c of bias.slice(0, 200)) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="text-monospace small">${escapeHtml(c.txid || '')}</td>
+                <td>${c.vin ?? '-'}</td>
+                <td>${c.k_bit_length ?? '-'}</td>
+                <td class="text-monospace small">${escapeHtml(c.k_hex || '')}</td>
+            `;
+            biasBody.appendChild(row);
+        }
+        if (bias.length === 0) {
+            biasBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
+        }
+    }
+
+    // Notes
+    const notes = data?.notes || [];
+    const notesCard = document.getElementById('notes-card');
+    const notesBody = document.getElementById('notes-body');
+    if (notesCard) notesCard.classList.toggle('d-none', notes.length === 0);
+    if (notesBody) {
+        notesBody.innerHTML = '';
+        for (const n of notes) {
+            const li = document.createElement('li');
+            li.className = 'text-monospace small';
+            li.textContent = n;
+            notesBody.appendChild(li);
+        }
+    }
+}
+
+function setText(id, v) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(v);
+}
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function shortHex(n) {
+    if (n == null) return '-';
+    let s;
+    if (typeof n === 'string') {
+        s = n;
     } else {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="3" class="text-center">No weak signatures found</td>';
-        tableBody.appendChild(row);
+        // big-int or number
+        try { s = '0x' + BigInt(n).toString(16); }
+        catch (_) { s = String(n); }
     }
-
-    const relatedAddresses = document.getElementById('related-addresses');
-    if (!relatedAddresses) {
-        console.error('Related addresses container not found');
-        return;
-    }
-
-    relatedAddresses.innerHTML = '';
-
-    if (data?.related_addresses?.length > 0) {
-        data.related_addresses.forEach(addr => {
-            const div = document.createElement('div');
-            div.className = 'alert alert-info';
-            div.textContent = addr;
-            relatedAddresses.appendChild(div);
-        });
-    } else {
-        relatedAddresses.innerHTML = '<p>No related addresses found</p>';
-    }
+    if (s.length > 18) return s.slice(0, 10) + '...' + s.slice(-6);
+    return s;
 }
 
 function showLoading(type) {

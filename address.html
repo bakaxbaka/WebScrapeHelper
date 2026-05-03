@@ -4,7 +4,11 @@
 <div class="row">
     <div class="col-12">
         <h2><i class="fas fa-wallet"></i> Address Analysis</h2>
-        <p>Enter a Bitcoin address to analyze its transactions for signature weaknesses.</p>
+        <p>Walks the full transaction history of a Bitcoin address, parses every signature
+           (P2PK / P2PKH / P2WPKH / P2SH-P2WPKH / P2WSH multisig / bare multisig / Taproot
+           key-path) with the real per-input ECDSA <code>z</code>, and detects in-tx + cross-tx
+           reused-<code>r</code>, low-S, biased-nonce candidates, and recovers private keys
+           where the math works out.</p>
     </div>
 </div>
 
@@ -13,17 +17,24 @@
         <div class="card">
             <div class="card-body">
                 <form id="address-analysis-form">
-                    <div class="mb-3">
-                        <label for="btc-address" class="form-label">Bitcoin Address</label>
-                        <input type="text" class="form-control" id="btc-address" 
-                               placeholder="Enter Bitcoin address" required>
-                        <div class="invalid-feedback">
-                            Please enter a valid Bitcoin address
+                    <div class="row align-items-end">
+                        <div class="col-md-8 mb-3">
+                            <label for="btc-address" class="form-label">Bitcoin Address</label>
+                            <input type="text" class="form-control" id="btc-address"
+                                   placeholder="1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" required>
+                            <div class="invalid-feedback">Please enter a valid Bitcoin address</div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label for="btc-max-txs" class="form-label">Max txs</label>
+                            <input type="number" class="form-control" id="btc-max-txs"
+                                   value="500" min="1" max="10000">
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> Analyze
+                            </button>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i> Analyze
-                    </button>
                 </form>
             </div>
         </div>
@@ -36,47 +47,144 @@
             <div class="spinner-border text-primary" role="status">
                 <span class="visually-hidden">Loading...</span>
             </div>
-            <p>Analyzing address transactions...</p>
+            <p>Walking address transaction history... this can take 1&ndash;2 minutes for large addresses.</p>
         </div>
 
         <div id="address-results" class="d-none">
-            <h3>Analysis Results</h3>
-            <div class="card">
+            <div class="card mb-3">
+                <div class="card-header"><h4 class="mb-0">Aggregate Report</h4></div>
                 <div class="card-body">
-                    <div class="results-summary">
-                        <p><strong>Address:</strong> <span id="result-address"></span></p>
-                        <p><strong>Transactions Analyzed:</strong> <span id="result-txs"></span></p>
-                        <p><strong>Weak Signatures Found:</strong> <span id="result-weak"></span></p>
-                    </div>
-
-                    <div class="mt-4">
-                        <h4>Weak Signatures</h4>
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Transaction</th>
-                                        <th>Type</th>
-                                        <th>Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="address-weak-sigs">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><th>Address</th><td class="text-monospace" id="result-address">-</td></tr>
+                                    <tr><th>Total TXs in history</th><td id="result-total-txs">-</td></tr>
+                                    <tr><th>TXs analyzed</th><td id="result-txs-analyzed">-</td></tr>
+                                    <tr><th>Total signatures</th><td id="result-sigs-total">-</td></tr>
+                                    <tr><th>Low-S signatures</th><td id="result-low-s">-</td></tr>
+                                    <tr><th>Schnorr (Taproot)</th><td id="result-schnorr">-</td></tr>
+                                    <tr><th>Sigs with <code>z</code> unavailable</th><td id="result-z-na">-</td></tr>
+                                    <tr><th>Elapsed</th><td id="result-elapsed">-</td></tr>
                                 </tbody>
                             </table>
                         </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <h4>Related Addresses</h4>
-                        <div id="related-addresses">
+                        <div class="col-md-6">
+                            <h5>Signatures by script type</h5>
+                            <table class="table table-sm" id="result-sigs-by-type">
+                                <thead><tr><th>Script type</th><th class="text-end">Count</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <div class="card mb-3 border-danger" id="recovered-keys-card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-key"></i>
+                        Recovered Private Keys (<span id="recovered-keys-count">0</span>)
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Private Key (hex)</th>
+                                    <th>WIF</th>
+                                    <th>Address</th>
+                                    <th>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recovered-keys-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h4 class="mb-0">Reused-<code>r</code> Groups (<span id="reused-groups-count">0</span>)</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Distinct <code>r</code> values that appear in two or more
+                       signatures across this address's history. Same <code>r</code> across two different
+                       <code>z</code> values is a hard private-key recovery via
+                       <code>d = (s<sub>1</sub>z<sub>1</sub> &minus; s<sub>2</sub>z<sub>2</sub>) / (r(z<sub>1</sub> &minus; z<sub>2</sub>))</code>.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr><th>r (truncated)</th><th>occurrences</th><th>unique txs</th><th>sample tx</th></tr>
+                            </thead>
+                            <tbody id="reused-groups-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h4 class="mb-0">Cross-TX Pairs (<span id="cross-tx-count">0</span>)</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Pairwise expansion of the groups above &mdash; the raw input
+                       to the recovery formula. Capped to 200 rows for display.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr><th>r (truncated)</th><th>tx_a</th><th>vin</th><th>tx_b</th><th>vin</th><th>script types</th></tr>
+                            </thead>
+                            <tbody id="cross-tx-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h4 class="mb-0">In-TX Reused-<code>r</code> (<span id="in-tx-count">0</span>)</h4>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr><th>r (truncated)</th><th>txid</th><th>vin a / vin b</th><th>script types</th></tr>
+                            </thead>
+                            <tbody id="in-tx-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h4 class="mb-0">Biased-Nonce Candidates (<span id="bias-count">0</span>)</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">For signatures by recovered keys, signals when the
+                       computed nonce <code>k</code> has anomalously short bit length (&lt; 240 bits) &mdash;
+                       indicates an RNG that left top bits zero (lattice-attackable).</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr><th>txid</th><th>vin</th><th>k bits</th><th>k</th></tr>
+                            </thead>
+                            <tbody id="bias-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3" id="notes-card">
+                <div class="card-header"><h4 class="mb-0">Notes</h4></div>
+                <div class="card-body">
+                    <ul class="mb-0" id="notes-body"></ul>
+                </div>
+            </div>
         </div>
 
-        <div id="address-error" class="alert alert-danger d-none">
-        </div>
+        <div id="address-error" class="alert alert-danger d-none"></div>
     </div>
 </div>
 {% endblock %}
