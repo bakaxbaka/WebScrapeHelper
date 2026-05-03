@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 from ecdsa import SECP256k1, SigningKey
 from attached_assets.utils import format_hex, calculate_message_hash
+from signature_extractor import extract_signatures as _extract_real_signatures
 
 logger = logging.getLogger(__name__)
 
@@ -293,55 +294,58 @@ class BTCAnalyzer:
 
     def _extract_signatures_with_sighash(self, tx_data: Dict) -> List[Dict]:
         """
-        Extract (r, s) pairs from each input's scriptSig.
+        Extract (r, s, real-z) tuples from each input.
 
-        NOTE on the message field:
-        Computing the real per-input Bitcoin sighash requires reconstructing the
-        full SIGHASH_ALL preimage (script_pubkey of the prev output substituted
-        in, etc.), which the public blockchain.info `rawtx` response does not
-        give us in a directly usable form for every script type. Rather than
-        fabricating a value here, we leave ``message`` as ``None`` and expose a
-        short ``message_placeholder`` derived from (txid, input_index) purely
-        for display / grouping. Recovery code MUST NOT use the placeholder as
-        the ECDSA z value -- callers that want real key recovery should pass
-        their own message hashes through ``/api/analyze/ecdsa`` or
-        ``/api/calculate/nonce``.
+        Uses :mod:`signature_extractor` to parse the raw transaction, decode
+        each input's DER signature (or witness, for SegWit v0 P2WPKH), and
+        compute the real per-input ECDSA message hash ``z``:
+
+        * Legacy inputs: SIGHASH_ALL / NONE / SINGLE [+ ANYONECANPAY] per
+          Bitcoin Core's ``SignatureHash``.
+        * SegWit v0 P2WPKH: BIP-143 sighash.
+
+        Inputs we cannot reconstruct ``z`` for (e.g. unsupported P2SH redeem
+        scripts) are returned with ``message=None`` so downstream recovery
+        skips them rather than fabricating a value.
         """
-        signatures = []
+        tx_id = tx_data.get('hash', '')
+        signatures: List[Dict] = []
         try:
-            inputs = tx_data.get('inputs', [])
-            base_hash = tx_data.get('hash', '')
-
-            for input_idx, input_data in enumerate(inputs):
-                script = input_data.get('script', '')
-                try:
-                    sig_data = self._parse_der_signature(script)
-                    if sig_data:
-                        placeholder = hashlib.sha256(
-                            (base_hash + str(input_idx)).encode()
-                        ).hexdigest()
-
-                        signatures.append({
-                            'r': sig_data['r'],
-                            's': sig_data['s'],
-                            'message': None,
-                            'message_placeholder': placeholder,
-                            'input_index': input_idx,
-                            'px': None,
-                            'py': None,
-                        })
-                        logger.debug(
-                            "Extracted input %s: r=%s..., s=%s...",
-                            input_idx, sig_data['r'][:16], sig_data['s'][:16],
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to parse signature from input {input_idx}: {e}")
+            real_sigs = _extract_real_signatures(
+                tx_id,
+                fetch_json=lambda _t: tx_data,
+                fetch_raw_hex=self._fetch_raw_hex,
+            )
+            for s in real_sigs:
+                if s.get('r') is None:
                     continue
-
+                signatures.append({
+                    'r': format_hex(s['r']),
+                    's': format_hex(s['s']),
+                    'message': format_hex(s['z']) if s.get('z') is not None else None,
+                    'sighash_type': s.get('sighash_type'),
+                    'input_index': s.get('input_index'),
+                    'script_type': s.get('script_type'),
+                    'pubkey': s['pubkey'].hex() if s.get('pubkey') else None,
+                    'px': None,
+                    'py': None,
+                })
         except Exception as e:
             logger.error(f"Error extracting signatures with sighash: {str(e)}")
 
         return signatures
+
+    def _fetch_raw_hex(self, tx_id: str) -> str:
+        try:
+            r = requests.get(
+                f"https://blockchain.info/rawtx/{tx_id}?format=hex", timeout=15
+            )
+            if r.ok:
+                return r.text
+            return ""
+        except Exception as e:
+            logger.error(f"Error fetching raw tx hex: {e}")
+            return ""
 
     def _parse_der_signature(self, script: str) -> Optional[Dict]:
         """Parse DER-encoded signature from script"""
