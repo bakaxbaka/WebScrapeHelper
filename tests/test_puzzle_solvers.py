@@ -49,6 +49,23 @@ def test_bsgs_synthetic_up_to_36_bits():
         assert r.found and r.d == d, f"bsgs {bits} bits: {r}"
 
 
+def test_bsgs_does_not_return_d_outside_range():
+    """Regression for Devin Review on PR #7: with width=1 the baby step
+    table covers offsets > width, and the i=0 path used to return a d
+    outside [range_low, range_high]. Make sure BSGS now reports
+    not-found instead of falsely claiming d=range_low+j.
+    """
+    from coincurve import PrivateKey
+    # range = {42}: target=43*G is NOT in the range, BSGS must report not-found.
+    target = PrivateKey.from_int(43).public_key
+    r = bsgs_solve(target, 42, 42)
+    assert not r.found, f"bsgs reported false positive: {r}"
+
+    target = PrivateKey.from_int(102).public_key
+    r = bsgs_solve(target, 100, 101)
+    assert not r.found, f"bsgs reported false positive: {r}"
+
+
 def test_kangaroo_synthetic_up_to_28_bits():
     """Kangaroo is probabilistic; run with a generous budget."""
     for bits in [16, 20, 24, 28]:
@@ -64,6 +81,8 @@ if __name__ == "__main__":
     print("PASS  bsgs       on puzzles 1-15")
     test_bsgs_synthetic_up_to_36_bits()
     print("PASS  bsgs       on synthetic 16-36 bits")
+    test_bsgs_does_not_return_d_outside_range()
+    print("PASS  bsgs       rejects targets outside the range (regression)")
     test_kangaroo_synthetic_up_to_28_bits()
     print("PASS  kangaroo   on synthetic 16-28 bits")
     print("\nALL PUZZLE SOLVER TESTS PASSED")

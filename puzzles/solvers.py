@@ -40,8 +40,17 @@ def _scalar_mul(k: int) -> PublicKey:
     return PrivateKey.from_int(k % N).public_key
 
 
-def _add(p: PublicKey, q: PublicKey) -> PublicKey:
-    return PublicKey.combine_keys([p, q])
+def _add(p: PublicKey, q: PublicKey) -> Optional[PublicKey]:
+    """Affine addition over secp256k1.
+
+    Returns ``None`` when the sum is the point at infinity (i.e. ``p + q``
+    has no valid affine representation, which coincurve rejects).
+    Callers are expected to handle the ``None`` case as "logical zero".
+    """
+    try:
+        return PublicKey.combine_keys([p, q])
+    except ValueError:
+        return None
 
 
 def _neg(p: PublicKey) -> PublicKey:
@@ -131,11 +140,23 @@ def bsgs_solve(target: PublicKey, range_low: int, range_high: int,
     # i=0 case: target' itself in baby steps => d = range_low + j
     if _key(cur) in table:
         j = table[_key(cur)]
-        return SolveResult(True, range_low + j, time.time() - start,
-                           m + 1, "bsgs")
-    # Iterate giant steps
+        d = range_low + j
+        if range_low <= d <= range_high:
+            return SolveResult(True, d, time.time() - start,
+                               m + 1, "bsgs")
+    # Iterate giant steps. ``cur = target' - i*mG``. If we ever land on the
+    # identity (``cur is None``), the discrete log is exactly ``i*m``: that
+    # corresponds to ``j=0`` which isn't in the baby-step table by design,
+    # so check it explicitly and continue from ``-mG`` next round.
     for i in range(1, m + 2):
         cur = _add(cur, neg_mG)
+        if cur is None:
+            d = range_low + i * m
+            if range_low <= d <= range_high:
+                return SolveResult(True, d, time.time() - start,
+                                   m + i + 1, "bsgs")
+            cur = _neg(mG)  # next iteration: -2*mG, -3*mG, ...
+            continue
         k = _key(cur)
         if k in table:
             j = table[k]
