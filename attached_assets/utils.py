@@ -7,6 +7,21 @@ import base58
 from ecdsa import SECP256k1, SigningKey
 
 
+def _ripemd160(data: bytes) -> bytes:
+    """RIPEMD-160 digest with a PyCryptodome fallback.
+
+    Newer OpenSSL builds (e.g. Ubuntu's default in 24.04) drop legacy
+    digests, so ``hashlib.new("ripemd160", ...)`` raises. Bitcoin tooling
+    needs RIPEMD-160 for HASH160, so we fall back to PyCryptodome which
+    ships its own implementation.
+    """
+    try:
+        return hashlib.new("ripemd160", data).digest()
+    except (ValueError, Exception):  # OpenSSL: UnsupportedDigestmodError
+        from Crypto.Hash import RIPEMD160
+        return RIPEMD160.new(data).digest()
+
+
 def private_key_to_wif(private_key: Union[str, int], compressed: bool = True) -> str:
     """Convert a private key (hex string or int) to Wallet Import Format (WIF)."""
     if isinstance(private_key, int):
@@ -30,7 +45,7 @@ def private_key_to_wif(private_key: Union[str, int], compressed: bool = True) ->
 def public_key_to_p2pkh_address(public_key_bytes: bytes) -> str:
     """Convert a public key (bytes) to a P2PKH Bitcoin address."""
     sha256_hash = hashlib.sha256(public_key_bytes).digest()
-    ripemd160_hash = hashlib.new('ripemd160', sha256_hash).digest()
+    ripemd160_hash = _ripemd160(sha256_hash)
     
     versioned_payload = b'\x00' + ripemd160_hash
     
