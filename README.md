@@ -1,43 +1,84 @@
-# WebScrapeHelper
-A comprehensive Bitcoin signature analysis web application that detects weak ECDSA signatures and attempts private key recovery. The system analyzes transaction IDs and Bitcoin addresses to identify vulnerabilities in cryptocurrency transactions.
-Core Features
-Transaction analysis with automatic ECDSA parameter extraction
-Address analysis covering all historical transactions
-DER signature parsing and validation
-Nonce reuse detection and private key recovery
-Mathematical implementation of recovery formulas: k = (z1-z2)/(s1-s2), x = (s*k-z)/r
-Recent Changes (June 24, 2025)
-✓ Fixed DER signature parsing to extract proper r and s numeric values
-✓ Implemented ECDSA nonce reuse attack with mathematical verification
-✓ Enhanced sighash calculation for multi-input transactions with unique message hashes
-✓ Applied standard nonce reuse formula: k = (z1-z2)/(s1-s2), x = (s1*k-z1)/r mod n
-✓ Added cryptographic verification to ensure recovered keys are mathematically correct
-✓ Enhanced address analyzer to fetch and analyze all transaction signatures
-✓ Resolved JavaScript library import conflicts causing duplicate class declarations
-✓ Added comprehensive error handling and verification for recovered private keys
-✓ Implemented detailed vulnerability modal with complete signature data
-✓ Fixed missing requests import and improved JavaScript loading sequence
-✓ Integrated NotSoSecure ECDSA attack methodology and educational content
-✓ Added WIF conversion and Bitcoin address generation for recovered private keys
-✓ Implemented real-time balance checking via blockchain.info API
-✓ Enhanced UI to display complete key information: hex, WIF, address, and balance
-✓ Added automated vulnerability scanner with live blockchain monitoring
-✓ Implemented mempool monitoring for real-time weak signature detection
-✓ Created auto-scan functionality to continuously check recent transactions
-→ Identified critical issue: Recovered private keys don't match transaction addresses → Investigation shows mathematical formulas are correct but address derivation has compatibility issues → System successfully detects nonce reuse and recovers keys, but address validation needs improvement
-Project Architecture
-Backend: Flask application with BTCAnalyzer class for signature analysis
-Frontend: Bootstrap UI with JavaScript cryptographic libraries (bignum.js, gfp.js, ec.js, bccurve.js, ecdsa.js)
-API: RESTful endpoints for transaction and address analysis
-Blockchain Integration: Real-time data fetching from blockchain.info API
-Technical Implementation
-DER signature decoding for accurate r/s value extraction
-Modular arithmetic for private key recovery using Python's built-in pow() function
-Signature verification through ecdsa library integration
-Concurrent transaction analysis for address-level scanning
-User Preferences
-Focus on mathematical accuracy over UI polish
-Prioritize functional private key recovery capabilities
-Maintain clear separation between backend analysis and frontend display
-Critical requirement: Recovered private keys MUST control addresses involved in the analyzed transaction
-Address validation is essential - recovered keys should generate addresses that match transaction inputs/outputs
+# WebScrapeHelper — Bitcoin ECDSA Signature Analyzer
+
+A Flask-based research tool for inspecting Bitcoin transactions for textbook
+ECDSA weaknesses (low-S, repeated `r`/nonce reuse) and, when given real per-input
+message hashes, applying the standard nonce-reuse recovery formula
+`x = (s·k − z) / r mod n`.
+
+## Status & honest caveats
+
+* The transaction analyzer fetches `r` and `s` from the input scriptSigs via
+  `blockchain.info` and detects shared `r` across inputs.
+* The analyzer does **not** reconstruct the real per-input Bitcoin
+  SIGHASH_ALL preimage. Recovering a private key from the pure
+  transaction-id endpoint therefore intentionally stops after detection — the
+  required ECDSA `z` values aren't available.
+* Use the `POST /api/analyze/ecdsa`, `POST /api/recover/low-s-with-nonce`,
+  `POST /api/calculate/nonce` or the offline calculator at
+  `/standalone-calculator` when you have real `z` values to feed in.
+
+This tool is for defensive security research / education. It is **not** a
+"key recovery" magic wand — the math only works when the underlying
+mathematical preconditions are actually satisfied by the data you supply.
+
+## Routes
+
+| Path | Purpose |
+| --- | --- |
+| `/` | Landing page with quick links and live-scan buttons |
+| `/transaction` | Analyze a single transaction by id |
+| `/address` | Analyze every transaction for a given address |
+| `/ecdsa-analysis` | Manual ECDSA parameter playground |
+| `/standalone-calculator` | Render the offline ECDSA calculator |
+| `/download-calculator` | Download the offline calculator HTML |
+| `/api/analyze/transaction` | `POST {tx_id}` |
+| `/api/analyze/address` | `POST {address}` |
+| `/api/analyze/ecdsa` | `POST {tx_id}` or `POST {r1, s1, m1, r2, s2, m2}` |
+| `/api/recover/low-s-with-nonce` | `POST {r, s, z, k}` |
+| `/api/recover/malleability-signatures` | `POST {r, s_values, z}` |
+| `/api/calculate/nonce` | `POST {r, s1, s2, z1, z2}` |
+| `/api/calculate/nonce-from-private-key` | `POST {r, s, z, x}` |
+| `/api/auto-scan` | Scan the latest block for vulnerable signatures |
+| `/api/monitor-mempool` | Scan the mempool for vulnerable signatures |
+
+## Local setup
+
+```bash
+# Option A: pip
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Option B: uv (uses pyproject.toml)
+uv sync
+
+# Run the dev server
+FLASK_DEBUG=1 python main.py
+# or
+gunicorn -w 2 -b 0.0.0.0:5000 main:app
+```
+
+The server listens on port `5000` by default. `FLASK_DEBUG` and `PORT` env
+vars are honored by `main.py`.
+
+## Project layout
+
+```
+app.py                       Flask routes
+btc_analyzer.py              ECDSA analysis / recovery code
+attached_assets/             utils, validators, address list
+static/                      JS, CSS, downloadable offline calculator
+*.html                       Jinja templates (template_folder='.')
+block_scanner.py             Standalone block scanner
+continuous_scanner.py        Long-running mempool / block hunter
+enhanced_hunter.py           Async variant of the hunter
+run_hunter.py                CLI entry point for the hunters
+```
+
+## Security & ethics
+
+This is a defensive analysis tool. Do **not** use it to attempt access to
+Bitcoin funds you do not control. The recovery code only succeeds against
+mathematical preconditions that arise from genuinely broken signing
+implementations; keys returned for transactions whose preconditions are not
+met are not valid keys.

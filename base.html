@@ -56,15 +56,15 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- Cryptographic libraries -->
-    <script src="{{ url_for('static', filename='js/bignum.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/gfp.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/ec.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/bccurve.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/ecdsa.js') }}?v=2"></script>
-    
+    <script src="{{ url_for('static', filename='js/bignum.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/gfp.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ec.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bccurve.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ecdsa.js') }}"></script>
+
     <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/validator.js') }}?v=2"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='js/validator.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
     {% block extra_js %}{% endblock %}
 </body>

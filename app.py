@@ -1,11 +1,18 @@
 import os
 import logging
+import re
 import requests
 from flask import Flask, render_template, jsonify, request, send_file
 from btc_analyzer import BTCAnalyzer
 from attached_assets.validators import validate_transaction_id
 from attached_assets.address_list import ADDRESSES_TO_CHECK
-from attached_assets.utils import calculate_message_hash, format_hex
+from attached_assets.utils import format_hex
+
+_BTC_ADDRESS_RE = re.compile(r"^(?:[13][1-9A-HJ-NP-Za-km-z]{25,34}|bc1[02-9ac-hj-np-z]{6,87})$")
+
+
+def _validate_btc_address(address):
+    return isinstance(address, str) and bool(_BTC_ADDRESS_RE.match(address.strip()))
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -62,7 +69,7 @@ def download_calculator():
 def analyze_transaction():
     try:
         logger.debug("Received transaction analysis request")
-        data = request.get_json()
+        data = request.get_json(silent=True)
         logger.debug(f"Request data: {data}")
 
         if not data or 'tx_id' not in data:
@@ -88,7 +95,7 @@ def analyze_address():
     data = None
     try:
         logger.debug("Received address analysis request")
-        data = request.get_json()
+        data = request.get_json(silent=True)
         logger.debug(f"Request data: {data}")
 
         if not data or 'address' not in data:
@@ -96,6 +103,8 @@ def analyze_address():
             return jsonify({'error': 'Address is required'}), 400
 
         address = data.get('address', 'unknown')
+        if not _validate_btc_address(address):
+            return jsonify({'error': 'Invalid Bitcoin address format'}), 400
         logger.debug(f"Analyzing address: {address}")
         
         try:
@@ -139,7 +148,7 @@ def analyze_ecdsa():
     nonce_reuse_sigs = None
     try:
         logger.debug("Received ECDSA analysis request")
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         logger.debug(f"Request data: {data}")
 
         # Check if transaction ID is provided for auto-parameter extraction
@@ -527,12 +536,6 @@ def get_known_addresses():
 def auto_scan_weak_signatures():
     """Automatically scan recent Bitcoin transactions for weak signatures"""
     try:
-        from btc_analyzer import BTCAnalyzer
-        analyzer = BTCAnalyzer()
-        
-        # Fetch recent transactions from blockchain.info
-        import requests
-        
         # Get latest blocks and scan for weak signatures
         response = requests.get('https://blockchain.info/latestblock', timeout=10)
         if response.status_code == 200:
@@ -581,17 +584,12 @@ def auto_scan_weak_signatures():
 def monitor_mempool():
     """Monitor Bitcoin mempool for transactions with weak signatures"""
     try:
-        import requests
-        
         # Get unconfirmed transactions from mempool
         response = requests.get('https://blockchain.info/unconfirmed-transactions?format=json', timeout=10)
         if response.status_code == 200:
             mempool_data = response.json()
             transactions = mempool_data.get('txs', [])
-            
-            from btc_analyzer import BTCAnalyzer
-            analyzer = BTCAnalyzer()
-            
+
             vulnerable_txs = []
             
             # Scan up to 10 mempool transactions

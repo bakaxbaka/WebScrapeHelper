@@ -57,26 +57,24 @@ function loadKnownAddresses() {
         });
 }
 
-// Call the function when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const addressesTable = document.getElementById('known-addresses');
-    if (addressesTable) {
-        loadKnownAddresses();
-    }
-});
-
 // Main application logic
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing application...');
     // Initialize Bitcoin curve
-    window.B = secp256k1();
-    console.log('Bitcoin curve initialized');
+    if (typeof secp256k1 === 'function') {
+        window.B = secp256k1();
+        console.log('Bitcoin curve initialized');
+    }
 
-    // Initialize forms
+    // Initialize forms (each helper is a no-op if its target isn't on the page)
     initTransactionForm();
     initAddressForm();
-    loadKnownAddresses();
     initLiveScanning();
+    initTransactionAnalysis();
+
+    if (document.getElementById('known-addresses')) {
+        loadKnownAddresses();
+    }
 });
 
 function displayECDSAParameters(data, sig) {
@@ -387,27 +385,6 @@ function displayAddressResults(data) {
     }
 }
 
-function loadKnownAddresses() {
-    console.log('Fetching known addresses');
-    fetch('/api/addresses/known')
-        .then(response => response.json())
-        .then(addresses => {
-            console.log('Received known addresses:', addresses);
-            const addressList = document.getElementById('known-addresses-list');
-            if (addressList) {
-                addressList.innerHTML = addresses.map(addr => 
-                    `<li class="list-group-item d-flex justify-content-between align-items-center">
-                        <code>${addr}</code>
-                        <button class="btn btn-sm btn-outline-primary" onclick="analyzeKnownAddress('${addr}')">
-                            <i class="fas fa-search"></i> Analyze
-                        </button>
-                    </li>`
-                ).join('');
-            }
-        })
-        .catch(error => console.error('Error loading known addresses:', error));
-}
-
 function showLoading(type) {
     const element = document.getElementById(`${type}-loading`);
     if (element) {
@@ -650,7 +627,7 @@ function displayLiveScanResults(data, scanType) {
                             <p><strong>Size:</strong> ${result.size} bytes</p>
                             <p><strong>Timestamp:</strong> ${new Date(result.timestamp * 1000).toLocaleString()}</p>
                         ` : ''}
-                        <button class="btn btn-sm btn-primary" onclick="analyzeTransaction('${result.tx_id}')">
+                        <button class="btn btn-sm btn-primary" onclick="goToTransaction('${result.tx_id}')">
                             <i class="fas fa-microscope"></i> Analyze Details
                         </button>
                     </div>
@@ -708,26 +685,27 @@ function monitorMempool() {
 }
 
 function initTransactionAnalysis() {
-    const txForm = document.getElementById('transaction-form');
+    // On the /transaction page, accept ?tx=<id> and auto-submit so links from
+    // other pages (e.g. live-scan results) prefill and run the analysis.
+    const txForm = document.getElementById('tx-analysis-form');
     if (!txForm) {
-        console.log('Transaction form not found');
         return;
     }
 
-    // Check for pre-filled transaction ID from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const txId = urlParams.get('tx');
     if (txId) {
         const txInput = document.getElementById('tx-id');
         if (txInput) {
             txInput.value = txId;
-            // Auto-submit the form
             setTimeout(() => txForm.dispatchEvent(new Event('submit')), 500);
         }
     }
 }
 
-function analyzeTransaction(txId) {
-    // Navigate to transaction analysis page with pre-filled ID
+// Helper used by buttons in scan-result cards to jump to the analysis page
+// for a specific transaction. Distinct from analyzeTransaction(txId), which
+// performs the actual API call on the /transaction page.
+function goToTransaction(txId) {
     window.location.href = `/transaction?tx=${txId}`;
 }
