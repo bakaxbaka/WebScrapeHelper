@@ -170,36 +170,57 @@ def analyze_ecdsa():
                     if sig.get('type') in ['nonce_reuse', 'reused_r'] and 'all_signatures' in sig:
                         all_sigs = sig['all_signatures']
                         if len(all_sigs) >= 2:
-                            # Take first two signatures with same r value
                             sig1 = all_sigs[0]
                             sig2 = all_sigs[1]
-                            
+
+                            if not sig1.get('message') or not sig2.get('message'):
+                                # _extract_signatures_with_sighash deliberately
+                                # leaves ``message`` as ``None`` when we cannot
+                                # compute a real Bitcoin sighash for the input.
+                                # Recovery requires real z values; bail out
+                                # cleanly instead of crashing on None arithmetic.
+                                return jsonify({
+                                    'error': (
+                                        'Detected reused r in this transaction but real per-input '
+                                        'message hashes are not available from the public API. '
+                                        'Provide r1/s1/m1/r2/s2/m2 directly to /api/analyze/ecdsa, '
+                                        'or use /api/calculate/nonce, with real z values.'
+                                    ),
+                                    'detected': {
+                                        'r': sig.get('r'),
+                                        'reuse_count': sig.get('reuse_count'),
+                                    },
+                                }), 400
+
                             nonce_reuse_sigs = {
                                 'r1': sig1['r'],
-                                's1': sig1['s'], 
+                                's1': sig1['s'],
                                 'm1': sig1['message'],
                                 'r2': sig2['r'],
                                 's2': sig2['s'],
                                 'm2': sig2['message'],
                                 'input_index_1': sig1.get('input_index', 0),
-                                'input_index_2': sig2.get('input_index', 1)
+                                'input_index_2': sig2.get('input_index', 1),
                             }
                             break
-                
+
                 if not nonce_reuse_sigs:
                     return jsonify({'error': 'No nonce reuse detected in transaction'}), 400
-                
+
                 # Convert hex strings to integers
                 params = {}
-                for param in ['r1', 's1', 'm1', 'r2', 's2', 'm2']:
-                    hex_value = nonce_reuse_sigs[param]
-                    if isinstance(hex_value, str):
+                try:
+                    for param in ['r1', 's1', 'm1', 'r2', 's2', 'm2']:
+                        hex_value = nonce_reuse_sigs[param]
+                        if not isinstance(hex_value, str):
+                            raise ValueError(f"{param} is not a hex string")
                         if hex_value.startswith('0x'):
                             hex_value = hex_value[2:]
                         params[param] = int(hex_value, 16)
-                    else:
-                        params[param] = hex_value
-                
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Failed to convert extracted parameters: {e}")
+                    return jsonify({'error': f'Could not convert extracted parameters: {e}'}), 400
+
                 logger.debug(f"Extracted parameters: {params}")
                 
             except Exception as e:
