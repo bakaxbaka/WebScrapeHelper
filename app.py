@@ -108,8 +108,16 @@ def analyze_address():
         logger.debug(f"Analyzing address: {address}")
         
         try:
-            results = analyzer.analyze_address(address)
-            logger.debug(f"Analysis results: {results}")
+            from address_analyzer import analyze_address as comprehensive_analyze
+            max_txs_param = data.get('max_txs')
+            try:
+                max_txs = int(max_txs_param) if max_txs_param is not None else 500
+            except (TypeError, ValueError):
+                max_txs = 500
+            report = comprehensive_analyze(address, max_txs=max_txs)
+            results = report.to_dict()
+            logger.debug(f"Comprehensive analysis: {results.get('signatures_total')} sigs, "
+                          f"{len(results.get('recovered_keys', []))} keys recovered")
             
             # Add additional error handling
             if isinstance(results, dict) and 'error' in results:
