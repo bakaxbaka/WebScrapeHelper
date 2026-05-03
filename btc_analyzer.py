@@ -3,7 +3,7 @@ import hashlib
 from typing import Dict, List, Optional, Tuple
 import requests
 from ecdsa import SECP256k1, SigningKey
-from attached_assets.utils import format_hex, calculate_message_hash, int_to_bytes, bytes_to_int
+from attached_assets.utils import format_hex, calculate_message_hash
 
 logger = logging.getLogger(__name__)
 
@@ -199,8 +199,8 @@ class BTCAnalyzer:
             # Calculate y using modular square root
             y = pow(y_squared, (p + 1) // 4, p)
             
-            # Check if we need the other root
-            is_odd = prefix in ['03', '03']  # 0x03 = odd y
+            # Compressed pubkey prefix encodes the parity of y:
+            #   0x02 -> even y, 0x03 -> odd y
             if (y % 2 == 1) != (prefix == '03'):
                 y = p - y
             
@@ -293,35 +293,47 @@ class BTCAnalyzer:
 
     def _extract_signatures_with_sighash(self, tx_data: Dict) -> List[Dict]:
         """
-        Extract signatures with proper sighash calculation for each input
-        This handles multi-input nonce reuse scenarios correctly
+        Extract (r, s) pairs from each input's scriptSig.
+
+        NOTE on the message field:
+        Computing the real per-input Bitcoin sighash requires reconstructing the
+        full SIGHASH_ALL preimage (script_pubkey of the prev output substituted
+        in, etc.), which the public blockchain.info `rawtx` response does not
+        give us in a directly usable form for every script type. Rather than
+        fabricating a value here, we leave ``message`` as ``None`` and expose a
+        short ``message_placeholder`` derived from (txid, input_index) purely
+        for display / grouping. Recovery code MUST NOT use the placeholder as
+        the ECDSA z value -- callers that want real key recovery should pass
+        their own message hashes through ``/api/analyze/ecdsa`` or
+        ``/api/calculate/nonce``.
         """
         signatures = []
         try:
             inputs = tx_data.get('inputs', [])
-            
+            base_hash = tx_data.get('hash', '')
+
             for input_idx, input_data in enumerate(inputs):
                 script = input_data.get('script', '')
                 try:
-                    # Parse DER-encoded signatures from scriptSig
                     sig_data = self._parse_der_signature(script)
                     if sig_data:
-                        # For multi-input scenarios, each input has a different sighash
-                        # Use input index to create unique message hash
-                        base_hash = tx_data['hash']
-                        input_specific_hash = hashlib.sha256(
+                        placeholder = hashlib.sha256(
                             (base_hash + str(input_idx)).encode()
                         ).hexdigest()
-                        
+
                         signatures.append({
                             'r': sig_data['r'],
                             's': sig_data['s'],
-                            'message': input_specific_hash,
+                            'message': None,
+                            'message_placeholder': placeholder,
                             'input_index': input_idx,
                             'px': None,
-                            'py': None
+                            'py': None,
                         })
-                        logger.debug(f"Extracted input {input_idx}: r={sig_data['r'][:16]}..., s={sig_data['s'][:16]}...")
+                        logger.debug(
+                            "Extracted input %s: r=%s..., s=%s...",
+                            input_idx, sig_data['r'][:16], sig_data['s'][:16],
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to parse signature from input {input_idx}: {e}")
                     continue
@@ -442,50 +454,57 @@ class BTCAnalyzer:
 
     def _recover_private_keys(self, signatures: List[Dict]) -> List[int]:
         """
-        Attempt to recover private keys from weak signatures
-        """
-        recovered_keys = []
-        try:
-            # Group signatures by r value to find nonce reuse
-            r_groups = {}
-            for sig in signatures:
-                r_hex = sig['r']
-                if r_hex not in r_groups:
-                    r_groups[r_hex] = []
-                r_groups[r_hex].append(sig)
+        Attempt to recover private keys from groups of signatures that share the
+        same r value (classic nonce reuse).
 
-            # Process signatures that share the same r value
+        Recovery requires real ECDSA message hashes ``z`` for each signature.
+        When the caller has populated ``sig['message']`` with the real per-input
+        sighash we run the standard formula and verify the result against the
+        signature mathematically. Signatures whose message is ``None`` (the
+        default from ``_extract_signatures_with_sighash``) are skipped --
+        ``/api/analyze/ecdsa`` and ``/api/calculate/nonce`` are the appropriate
+        entry points when the caller has the real ``z`` values.
+        """
+        recovered_keys: List[int] = []
+        try:
+            r_groups: Dict[str, List[Dict]] = {}
+            for sig in signatures:
+                r_groups.setdefault(sig['r'], []).append(sig)
+
             for r_hex, sigs in r_groups.items():
-                if len(sigs) > 1:
-                    logger.info(f"Found {len(sigs)} signatures sharing r value: {r_hex[:16]}...")
-                    
-                    # Check if all signatures have the same message hash
-                    messages = set(sig['message'] for sig in sigs)
-                    if len(messages) == 1:
-                        logger.info("All signatures have identical message hashes - signature malleability case")
-                        # Try malleability recovery
-                        private_key = self._recover_from_malleability(sigs)
-                        if private_key:
-                            recovered_keys.append(private_key)
-                    else:
-                        logger.info(f"Found {len(messages)} different message hashes - true nonce reuse detected!")
-                        # Standard nonce reuse recovery with proper message handling
-                        success = False
-                        for i in range(len(sigs)):
-                            if success:
-                                break
-                            for j in range(i + 1, len(sigs)):
-                                try:
-                                    # Use standard nonce reuse formula with different message hashes
-                                    private_key = self._extract_private_key(sigs[i], sigs[j])
-                                    if private_key:
-                                        logger.info(f"Successfully recovered private key from inputs {i},{j}: {format_hex(private_key)}")
-                                        recovered_keys.append(private_key)
-                                        success = True
-                                        break
-                                except Exception as e:
-                                    logger.debug(f"Failed to extract private key from pair {i},{j}: {e}")
-                                    continue
+                if len(sigs) <= 1:
+                    continue
+
+                logger.info("Found %d signatures sharing r value: %s...", len(sigs), r_hex[:16])
+
+                sigs_with_message = [s for s in sigs if s.get('message')]
+                if len(sigs_with_message) < 2:
+                    logger.info(
+                        "Skipping recovery for r=%s: real ECDSA message hashes not available "
+                        "(use /api/analyze/ecdsa or /api/calculate/nonce with real z values).",
+                        r_hex[:16],
+                    )
+                    continue
+
+                messages = {s['message'] for s in sigs_with_message}
+                if len(messages) == 1:
+                    logger.info("All signatures share the same z -- malleability, not recoverable from r reuse alone.")
+                    continue
+
+                for i in range(len(sigs_with_message)):
+                    recovered = None
+                    for j in range(i + 1, len(sigs_with_message)):
+                        try:
+                            recovered = self._extract_private_key(sigs_with_message[i], sigs_with_message[j])
+                        except Exception as e:
+                            logger.debug("Recovery from pair %d,%d failed: %s", i, j, e)
+                            recovered = None
+                        if recovered:
+                            logger.info("Recovered private key from inputs %d,%d: %s", i, j, format_hex(recovered))
+                            recovered_keys.append(recovered)
+                            break
+                    if recovered:
+                        break
 
         except Exception as e:
             logger.error(f"Error recovering private keys: {str(e)}")
@@ -494,149 +513,24 @@ class BTCAnalyzer:
 
     def _recover_from_malleability(self, signatures: List[Dict]) -> Optional[int]:
         """
-        Attempt to recover private key from signature malleability or multi-input attack
-        When same message is signed with same k but different s values
+        Placeholder kept for backwards compatibility.
+
+        The previous implementation chained together a series of heuristic
+        guesses (``k = r * s_diff_inv``, brute-forcing ``k`` from 1..1000,
+        scanning small "factor" multipliers, scanning small message-hash
+        deltas) that have no cryptographic basis and reliably produced false
+        "recovered keys" that nevertheless slipped past a tautological
+        verifier. We deliberately do not perform speculative recovery here:
+        when ``z`` is shared across a group of signatures with the same ``r``,
+        the nonce-reuse equations are degenerate and the private key cannot
+        be recovered from those signatures alone.
         """
-        try:
-            if len(signatures) < 2:
-                return None
-                
-            logger.info(f"Attempting malleability/multi-input recovery with {len(signatures)} signatures")
-            
-            # Convert first signature to integers for reference
-            r = int(signatures[0]['r'], 16)
-            z = int(signatures[0]['message'], 16)
-            n = self.curve.order
-            
-            logger.info(f"Common values: r={hex(r)}, z={hex(z)}, n={hex(n)}")
-            
-            # Try all signature pairs for different attack scenarios
-            for i, sig_i in enumerate(signatures):
-                s_i = int(sig_i['s'], 16)
-                
-                for j, sig_j in enumerate(signatures[i+1:], i+1):
-                    s_j = int(sig_j['s'], 16)
-                    
-                    logger.debug(f"Testing pair {i},{j}: s1={hex(s_i)}, s2={hex(s_j)}")
-                    
-                    # Method 1: Check for signature malleability (s2 = -s1 mod n)
-                    if (s_i + s_j) % n == 0:
-                        logger.info(f"Found complementary signatures: s1+s2=0 mod n")
-                        try:
-                            # For s2 = -s1: we can derive k directly
-                            # Since s = k^-1 * (z + x*r), if s1 = -s2, then k*s1 = z + x*r
-                            # This means k = (z + x*r) / s1, but we need to solve for both k and x
-                            # Alternative: use fact that valid signatures must satisfy the curve equation
-                            
-                            # Try: k = 2*z / (s_i - s_j) when s_j = -s_i (so s_i - s_j = 2*s_i)
-                            if s_i != 0:
-                                k = (2 * z * pow(2 * s_i, -1, n)) % n
-                                if k > 0:
-                                    x = ((s_i * k - z) * pow(r, -1, n)) % n
-                                    if self._verify_private_key(x, sig_i):
-                                        logger.info(f"Recovered private key from malleability: {hex(x)}")
-                                        return x
-                        except Exception as e:
-                            logger.debug(f"Malleability method 1 failed: {e}")
-                            continue
-                    
-                    # Method 2: Standard differential attack (different s values, same r and z)
-                    # This works when k is reused but s values differ due to implementation differences
-                    if s_i != s_j:
-                        try:
-                            # Since z1 = z2 = z and r1 = r2 = r, but s1 != s2
-                            # This could be a wallet implementation issue or padding attack
-                            # Try: assume one signature uses k, other uses -k or similar variant
-                            
-                            # Method 2a: Try implementation variant approach
-                            s_diff = (s_i - s_j) % n
-                            if s_diff != 0:
-                                # Try the exact successful algorithm from test script
-                                try:
-                                    # Method that worked: k = r / (s1 - s2) mod n
-                                    s_diff_inv = pow(s_diff, -1, n)
-                                    k = (r * s_diff_inv) % n
-                                    logger.debug(f"Calculated k = {hex(k)}")
-                                    
-                                    if k > 0:
-                                        r_inv = pow(r, -1, n)
-                                        x = ((s_i * k - z) * r_inv) % n
-                                        logger.debug(f"Calculated x = {hex(x)}")
-                                        
-                                        if 0 < x < n:
-                                            # Verify by reconstructing signature
-                                            k_inv = pow(k, -1, n)
-                                            s_verify = (k_inv * (z + x * r)) % n
-                                            logger.debug(f"Verification: s_verify = {hex(s_verify)}, original = {hex(s_i)}")
-                                            
-                                            if s_verify == s_i:
-                                                logger.info(f"Successfully recovered private key: {hex(x)}")
-                                                return x
-                                except Exception as e:
-                                    logger.debug(f"Implementation variant method failed: {e}")
-                                    pass
-                                
-                                # Try assuming slight message differences (successful in test)
-                                for delta in range(1, 100):
-                                    try:
-                                        z2_variant = (z + delta) % n
-                                        z_diff = (z - z2_variant) % n
-                                        
-                                        if z_diff != 0:
-                                            k = (z_diff * pow(s_diff, -1, n)) % n
-                                            if k > 0:
-                                                x = ((s_i * k - z) * pow(r, -1, n)) % n
-                                                if 0 < x < n and self._verify_private_key(x, sig_i):
-                                                    logger.info(f"Recovered private key with message delta {delta}: {hex(x)}")
-                                                    return x
-                                    except:
-                                        continue
-                                
-                                # Method 2b: Try assuming k differs by a small factor
-                                for factor in [2, 3, 4, 5, 7, 8, 16]:  # Common implementation factors
-                                    try:
-                                        # Assume s_j was computed with k*factor
-                                        k_factor = (factor * z * pow(s_diff, -1, n)) % n
-                                        if k_factor > 0:
-                                            x = ((s_i * k_factor - z) * pow(r, -1, n)) % n
-                                            if 0 < x < n and self._verify_private_key(x, sig_i):
-                                                logger.info(f"Recovered private key with factor {factor}: {hex(x)}")
-                                                return x
-                                    except:
-                                        continue
-                        except Exception as e:
-                            logger.debug(f"Differential method failed: {e}")
-                            continue
-            
-            # Method 3: Brute force small k values (last resort for weak implementations)
-            logger.info("Trying brute force approach for weak k values")
-            try:
-                for k in range(1, 1000):  # Check very small k values
-                    try:
-                        # Calculate what s should be for this k
-                        k_inv = pow(k, -1, n)
-                        expected_s = (k_inv * (z + (r * 1))) % n  # Assume x=1 for test
-                        
-                        # Check if any signature matches this pattern
-                        for sig in signatures:
-                            s = int(sig['s'], 16)
-                            if s == expected_s:
-                                # Found a match, now recover actual private key
-                                x = ((s * k - z) * pow(r, -1, n)) % n
-                                if 0 < x < n and self._verify_private_key(x, sig):
-                                    logger.info(f"Recovered private key from weak k={k}: {hex(x)}")
-                                    return x
-                    except:
-                        continue
-            except:
-                pass
-            
-            logger.warning("All recovery methods failed")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Malleability recovery failed: {str(e)}")
-            return None
+        logger.info(
+            "Skipping speculative malleability recovery for %d-signature group "
+            "(provide distinct real z values to /api/analyze/ecdsa to recover).",
+            len(signatures),
+        )
+        return None
 
     def _extract_private_key(self, sig1: Dict, sig2: Dict) -> Optional[int]:
         """
@@ -714,98 +608,47 @@ class BTCAnalyzer:
             logger.error(f"Private key extraction failed: {str(e)}", exc_info=True)
             return None
     
-    def _method1_recovery(self, r, s1, s2, z1, z2):
-        """Standard nonce reuse formula: k = (z1-z2)/(s1-s2), x = (s1*k-z1)/r"""
-        s_diff = (s1 - s2) % self.curve.order
-        if s_diff == 0:
-            return None
-        z_diff = (z1 - z2) % self.curve.order
-        k = (z_diff * pow(s_diff, -1, self.curve.order)) % self.curve.order
-        numerator = (s1 * k - z1) % self.curve.order
-        return (numerator * pow(r, -1, self.curve.order)) % self.curve.order
-    
-    def _method2_recovery(self, r, s1, s2, z1, z2):
-        """Alternative formula: x = (s1*z2 - s2*z1) / (r*(s1-s2))"""
-        s_diff = (s1 - s2) % self.curve.order
-        if s_diff == 0:
-            return None
-        numerator = (s1 * z2 - s2 * z1) % self.curve.order
-        denominator = (r * s_diff) % self.curve.order
-        return (numerator * pow(denominator, -1, self.curve.order)) % self.curve.order
-    
-    def _method3_recovery(self, r, s1, s2, z1, z2):
-        """Swapped values: k = (z2-z1)/(s2-s1), x = (s2*k-z2)/r"""
-        s_diff = (s2 - s1) % self.curve.order
-        if s_diff == 0:
-            return None
-        z_diff = (z2 - z1) % self.curve.order
-        k = (z_diff * pow(s_diff, -1, self.curve.order)) % self.curve.order
-        numerator = (s2 * k - z2) % self.curve.order
-        return (numerator * pow(r, -1, self.curve.order)) % self.curve.order
-    
-    def _method4_recovery(self, r, s1, s2, z1, z2):
-        """With negative k: k = -(z1-z2)/(s1-s2), x = (s1*k-z1)/r"""
-        s_diff = (s1 - s2) % self.curve.order
-        if s_diff == 0:
-            return None
-        z_diff = (z1 - z2) % self.curve.order
-        k = (-z_diff * pow(s_diff, -1, self.curve.order)) % self.curve.order
-        numerator = (s1 * k - z1) % self.curve.order
-        return (numerator * pow(r, -1, self.curve.order)) % self.curve.order
-
     def _verify_private_key_with_signature(self, private_key: int, sig1: Dict, sig2: Dict) -> bool:
         """
-        Verify recovered private key by checking if it can recreate the signatures
+        Verify a recovered private key by reconstructing the signatures it
+        would have produced.
+
+        Mathematically: given ``x``, for each (r, s, z) we recompute
+        ``k = (z + x*r) / s mod n`` and ``s' = k^-1 * (z + x*r) mod n`` and
+        check ``s' == s`` (modulo the canonical low-S form). For the
+        nonce-reuse case both signatures must yield the same ``k``.
         """
         try:
-            from ecdsa import SigningKey, SECP256k1
-            import hashlib
-            
-            if not (0 < private_key < self.curve.order):
+            n = self.curve.order
+            if not (0 < private_key < n):
                 return False
-            
-            # Test if this private key can generate signatures that match
-            # Check the mathematical relationship: s = k^-1 * (z + x*r) mod n
+
             r1 = int(sig1['r'], 16)
-            s1 = int(sig1['s'], 16) 
+            s1 = int(sig1['s'], 16)
             z1 = int(sig1['message'], 16)
-            
+
             r2 = int(sig2['r'], 16)
             s2 = int(sig2['s'], 16)
             z2 = int(sig2['message'], 16)
-            
-            # Since we have x (private key), we can calculate k from one signature
-            # k = (z + x*r) / s mod n
-            numerator1 = (z1 + private_key * r1) % self.curve.order
-            k1 = (numerator1 * pow(s1, -1, self.curve.order)) % self.curve.order
-            
-            # Verify with second signature - should get same k
-            numerator2 = (z2 + private_key * r2) % self.curve.order  
-            k2 = (numerator2 * pow(s2, -1, self.curve.order)) % self.curve.order
-            
-            # If private key is correct, k values should be equal (same nonce reused)
-            verification_passed = (k1 == k2) and (r1 == r2)
-            
-            logger.debug(f"Private key verification: k1={hex(k1)}, k2={hex(k2)}, match={verification_passed}")
-            return verification_passed
-            
+
+            if r1 != r2:
+                return False
+
+            k1 = ((z1 + private_key * r1) % n) * pow(s1, -1, n) % n
+            k2 = ((z2 + private_key * r2) % n) * pow(s2, -1, n) % n
+            if k1 == 0 or k2 == 0 or k1 != k2:
+                return False
+
+            # Cross-check against the canonical signature form for both pairs.
+            for r, s, z in ((r1, s1, z1), (r2, s2, z2)):
+                k_inv = pow(k1, -1, n)
+                expected = (k_inv * (z + private_key * r)) % n
+                if expected != s and (n - expected) != s:
+                    return False
+
+            return True
         except Exception as e:
             logger.debug(f"Signature verification failed: {e}")
-            return False
-            signing_key = SigningKey.from_string(key_bytes, curve=self.curve)
-
-            # Verify the signature
-            message_hash = sig['message']
-            r = int(sig['r'], 16)
-            s = int(sig['s'], 16)
-
-            # Reconstruct the signature
-            sig_bytes = int_to_bytes(r) + int_to_bytes(s)
-
-            return signing_key.verify(sig_bytes, message_hash)
-
-        except Exception as e:
-            logger.warning(f"Failed to verify private key: {e}")
             return False
 
     def _fetch_transaction(self, tx_id: str) -> Optional[Dict]:
@@ -906,9 +749,7 @@ class BTCAnalyzer:
         """
         try:
             from attached_assets.utils import private_key_to_wif, public_key_to_p2pkh_address
-            from ecdsa import SigningKey, SECP256k1
-            import requests
-            
+
             # Convert to WIF format
             wif = private_key_to_wif(private_key)
             

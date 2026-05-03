@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.envrc
+
+# Testing / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+
+# uv / pip caches
+.uv-cache/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Local secrets
+*.env.local
+secrets.json
+
+# Replit local state (kept .replit / replit.nix / replit.md committed for now)
+.upm/
+.config/
+.cache/
