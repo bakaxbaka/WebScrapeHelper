@@ -1,8 +1,11 @@
 """HTML page routes."""
 
+from pathlib import Path
+
 from flask import Blueprint, render_template, send_from_directory
 
 pages_bp = Blueprint("pages", __name__)
+STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
 
 @pages_bp.get("/")
@@ -33,7 +36,7 @@ def standalone_calculator_page():
 @pages_bp.get("/download-calculator")
 def download_calculator():
     return send_from_directory(
-        "../static",
+        STATIC_DIR,
         "ecdsa_standalone.html",
         mimetype="text/html",
         as_attachment=True,
