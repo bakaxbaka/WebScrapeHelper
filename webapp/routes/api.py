@@ -87,6 +87,30 @@ def validate_address(address: Any) -> str:
     return address.strip()
 
 
+def _safe_address_scan_result(result: dict[str, Any], address: str) -> dict[str, Any]:
+    """Return address-scan findings without exposing secret key material."""
+    safe = dict(result)
+    recovered = safe.pop("recovered_keys", []) or []
+    safe["recovered_key_count"] = len(recovered)
+    safe["private_key_material_exposed"] = False
+
+    repeated = safe.get("reused_r_groups", []) or []
+    cross = safe.get("cross_tx_reused_r", []) or []
+    within = safe.get("in_tx_reused_r", []) or []
+    if cross or within:
+        safe["risk_level"] = "high"
+        safe["finding_summary"] = "Repeated ECDSA r values were detected; verify the corresponding per-input z values and signatures before classifying the finding as exploitable."
+    elif safe.get("signatures_total", 0):
+        safe["risk_level"] = "none-observed"
+        safe["finding_summary"] = "No repeated ECDSA r values were observed in the analyzed history."
+    else:
+        safe["risk_level"] = "insufficient-data"
+        safe["finding_summary"] = "No ECDSA signatures were available for a cryptographic weakness assessment."
+    safe["address"] = address
+    safe["scanner"] = "address-history-v1"
+    return safe
+
+
 @api_bp.post("/analyze/transaction")
 @json_route
 def analyze_transaction():
@@ -113,6 +137,28 @@ def analyze_address():
     if isinstance(result, dict) and result.get("error"):
         return jsonify(address=address, error=result["error"], status="failed"), 502
     return jsonify(result)
+
+
+@api_bp.post("/scan/address")
+@json_route
+def scan_address():
+    """Scan an address history for cryptographic weaknesses.
+
+    This is the UI-facing endpoint. It deliberately strips recovered private-key
+    material and returns only vulnerability findings and verification metadata.
+    """
+    data = body()
+    require_fields(data, "address")
+    address = validate_address(data["address"])
+    try:
+        max_txs = int(data.get("max_txs", current_app.config["ANALYSIS_MAX_TXS"]))
+    except (TypeError, ValueError):
+        raise ValueError("max_txs must be an integer")
+    max_txs = max(1, min(max_txs, 5000))
+    result = get_service().analyze_address(address, max_txs=max_txs)
+    if isinstance(result, dict) and result.get("error"):
+        return jsonify(address=address, error=result["error"], status="failed"), 502
+    return jsonify(_safe_address_scan_result(result, address))
 
 
 @api_bp.post("/analyze/ecdsa")
@@ -180,11 +226,7 @@ def recover_with_known_nonce():
 @api_bp.post("/recover/malleability-signatures")
 @json_route
 def analyze_signature_malleability():
-    """Analyze ECDSA signature malleability without falsely claiming key recovery.
-
-    For a valid ECDSA signature (r, s), (r, n-s) is a malleable representation of
-    the same message. Malleability by itself does not reveal the private key.
-    """
+    """Analyze ECDSA signature malleability without falsely claiming key recovery."""
     data = body()
     require_fields(data, "r", "s_values", "z")
     if not isinstance(data["s_values"], list) or len(data["s_values"]) < 2:
