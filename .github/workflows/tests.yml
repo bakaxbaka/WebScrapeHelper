@@ -24,7 +24,6 @@ jobs:
             python-version: "3.12"
           - os: windows-latest
             python-version: "3.11"
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -72,12 +71,18 @@ jobs:
       - name: Start application and probe routes
         shell: bash
         run: |
+          set -u
           python main.py > app.log 2>&1 &
           APP_PID=$!
           trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+
+          ready=0
           for i in {1..30}; do
-            if curl --fail --silent --show-error http://127.0.0.1:5000/api/health > health.json; then
-              break
+            if curl --silent --show-error --output health.json --write-out '%{http_code}' http://127.0.0.1:5000/api/health > health.status; then
+              if grep -qx '200' health.status; then
+                ready=1
+                break
+              fi
             fi
             if ! kill -0 "$APP_PID" 2>/dev/null; then
               echo "Application exited before becoming ready"
@@ -86,15 +91,27 @@ jobs:
             fi
             sleep 1
           done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Application did not become ready within 30 seconds"
+            cat app.log
+            exit 1
+          fi
+
           cat health.json
           test "$(python -c 'import json; print(json.load(open("health.json"))["status"])')" = "ok"
+
           for route in / /transaction /address /ecdsa-analysis /standalone-calculator /download-calculator; do
             echo "Probing $route"
             curl --fail --silent --show-error "http://127.0.0.1:5000$route" -o /dev/null
           done
+
           echo "Probing API error handling"
-          curl --fail --silent --show-error -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:5000/api/analyze/transaction -o api-error.json
+          status=$(curl --silent --show-error -o api-error.json --write-out '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            http://127.0.0.1:5000/api/analyze/transaction)
           cat api-error.json
+          test "$status" = "400"
           test "$(python -c 'import json; print(json.load(open("api-error.json"))["status"])')" = "400"
       - name: Upload application log
         if: always()
