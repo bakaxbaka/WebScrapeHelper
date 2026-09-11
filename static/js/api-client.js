@@ -47,6 +47,7 @@
         knownAddresses: () => request("/addresses/known"),
         analyzeTransaction: (txId) => post("/analyze/transaction", { tx_id: txId }),
         analyzeAddress: (address, maxTxs = 500) => post("/analyze/address", { address, max_txs: maxTxs }),
+        scanAddress: (address, maxTxs = 500) => post("/scan/address", { address, max_txs: maxTxs }),
         analyzeECDSA: (payload) => post("/analyze/ecdsa", payload),
         calculateNonce: (payload) => post("/calculate/nonce", payload),
         calculateNonceFromPrivateKey: (payload) => post("/calculate/nonce-from-private-key", payload),
