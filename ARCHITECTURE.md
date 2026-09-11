@@ -6,7 +6,7 @@ The application is split into clear HTTP, service, and browser layers.
 Browser UI
   |
   +-- static/js/api-client.js       <- single HTTP client
-  +-- static/js/main.js             <- shared page/UI behavior
+  +-- static/js/main-controller.js  <- shared page/UI behavior
   +-- static/js/ecdsa_analyzer.js   <- ECDSA page controller
   |
   v
@@ -30,7 +30,7 @@ Application services
 
 1. **Routes do HTTP only.** Parse/validate input, call a service, return JSON/HTML.
 2. **Services do business logic.** They must not import Flask request/response objects.
-3. **Frontend network calls go through `api-client.js`.** UI code should not duplicate fetch configuration.
+3. **Frontend network calls go through `api-client.js`.** UI code does not duplicate fetch configuration.
 4. **Templates use blueprint-qualified `url_for()` names.**
 5. **API errors use HTTP status codes.** Upstream network failures return `502`; invalid input returns `400`; unexpected failures return `500`.
 6. **No secrets are logged.** Private-key recovery values should never be written to application logs.
@@ -62,4 +62,4 @@ Application services
 - `GET /api/auto-scan`
 - `GET /api/monitor-mempool`
 
-Legacy `POST /api/analyze_transaction` remains available for older browser code and can be removed after all clients migrate.
+Legacy `POST /api/analyze_transaction` remains available for older clients and can be removed after migration is complete.
