@@ -28,8 +28,8 @@ def test_application_frontend_uses_central_api_client():
     analyzer = read("static/js/ecdsa_analyzer.js")
     client = read("static/js/api-client.js")
 
-    assert "ApiClient" in controller
-    assert "ApiClient" in analyzer
+    assert "apiClient" in controller
+    assert "apiClient" in analyzer
     assert "fetch(" in client
     assert "fetch(" not in controller
     assert "fetch(" not in analyzer
@@ -37,5 +37,13 @@ def test_application_frontend_uses_central_api_client():
 
 def test_api_client_exposes_expected_backend_operations():
     client = read("static/js/api-client.js")
-    for operation in ("analyzeTransaction", "analyzeAddress", "analyzeEcdsa", "calculateNonce"):
+    for operation in (
+        "analyzeTransaction",
+        "analyzeAddress",
+        "analyzeECDSA",
+        "calculateNonce",
+        "calculateNonceFromPrivateKey",
+        "recoverWithKnownNonce",
+        "analyzeMalleability",
+    ):
         assert operation in client
