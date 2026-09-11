@@ -10,6 +10,7 @@ from flask import Flask, jsonify, request
 
 from webapp.config import Config
 from webapp.routes.api import api_bp
+from webapp.routes.legacy import legacy_bp
 from webapp.routes.pages import pages_bp
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(legacy_bp, url_prefix="/api")
 
     _register_http_handlers(app)
     _register_security_headers(app)
