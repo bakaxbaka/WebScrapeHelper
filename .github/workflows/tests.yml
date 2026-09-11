@@ -28,31 +28,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Show runtime
         run: |
           python --version
           python -m pip --version
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-
       - name: Check dependency consistency
         run: python -m pip check
-
       - name: Compile Python sources
         run: python -m compileall -q .
-
       - name: Run test suite with coverage
         run: python -m pytest -q --cov=webapp --cov-report=term-missing --cov-report=xml:coverage.xml --junitxml=test-results.xml
-
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -61,3 +54,51 @@ jobs:
           path: |
             test-results.xml
             coverage.xml
+
+  smoke:
+    name: Flask runtime smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Start application and probe routes
+        shell: bash
+        run: |
+          python main.py > app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:5000/api/health > health.json; then
+              break
+            fi
+            if ! kill -0 "$APP_PID" 2>/dev/null; then
+              echo "Application exited before becoming ready"
+              cat app.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat health.json
+          test "$(python -c 'import json; print(json.load(open("health.json"))["status"])')" = "ok"
+          for route in / /transaction /address /ecdsa-analysis /standalone-calculator /download-calculator; do
+            echo "Probing $route"
+            curl --fail --silent --show-error "http://127.0.0.1:5000$route" -o /dev/null
+          done
+          echo "Probing API error handling"
+          curl --fail --silent --show-error -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:5000/api/analyze/transaction -o api-error.json
+          cat api-error.json
+          test "$(python -c 'import json; print(json.load(open("api-error.json"))["status"])')" = "400"
+      - name: Upload application log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flask-runtime-log
+          path: app.log
