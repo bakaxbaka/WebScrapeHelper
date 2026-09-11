@@ -22,8 +22,8 @@ async function analyzeTransaction(txId) {
 async function analyzeAddress(address) {
     showLoading("address"); hideError("address");
     const maxTxs = Math.max(1, Math.min(parseInt(UI.get("btc-max-txs")?.value || "500", 10) || 500, 5000));
-    try { displayAddressResults(await window.apiClient.analyzeAddress(address, maxTxs)); }
-    catch (error) { showError("address", error.message || "Address analysis failed"); }
+    try { displayAddressResults(await window.apiClient.scanAddress(address, maxTxs)); }
+    catch (error) { showError("address", error.message || "Address vulnerability scan failed"); }
     finally { hideLoading("address"); }
 }
 
@@ -74,16 +74,25 @@ function displayAddressResults(data) {
         "result-address": data?.address || "N/A", "result-total-txs": data?.total_tx_count ?? 0,
         "result-txs-analyzed": data?.transactions_analyzed ?? 0, "result-sigs-total": data?.signatures_total ?? 0,
         "result-low-s": data?.low_s_count ?? 0, "result-schnorr": data?.schnorr_count ?? 0,
-        "result-z-na": data?.z_unavailable ?? 0, "result-elapsed": data?.elapsed_s ? `${Number(data.elapsed_s).toFixed(1)} s` : "-"
+        "result-z-na": data?.z_unavailable ?? 0, "result-elapsed": data?.elapsed_s ? `${Number(data.elapsed_s).toFixed(1)} s` : "-",
+        "reused-groups-count": (data?.reused_r_groups || []).length,
+        "cross-tx-count": (data?.cross_tx_reused_r || []).length,
+        "in-tx-count": (data?.in_tx_reused_r || []).length,
+        "bias-count": (data?.biased_nonce_candidates || []).length,
     })) UI.text(id, value);
 
-    renderRows("result-sigs-by-type", Object.entries(data?.signatures_by_type || {}).sort((a, b) => b[1] - a[1]), (row, [key, value]) => { row.insertCell().textContent = key; row.insertCell().textContent = value; }, 2);
-    renderRows("reused-groups-body", (data?.reused_r_groups || []).slice(0, 100), (row, item) => { row.insertCell().textContent = shortHex(item.r); row.insertCell().textContent = item.occurrences ?? "-"; row.insertCell().textContent = item.unique_txs ?? "-"; row.insertCell().textContent = item.tx_sample?.[0] || ""; }, 4);
-    renderRows("cross-tx-body", (data?.cross_tx_reused_r || []).slice(0, 200), (row, item) => { row.insertCell().textContent = shortHex(item.r); row.insertCell().textContent = item.tx_a || ""; row.insertCell().textContent = item.vin_a ?? "-"; row.insertCell().textContent = item.tx_b || ""; row.insertCell().textContent = item.vin_b ?? "-"; row.insertCell().textContent = `${item.script_type_a || "?"} / ${item.script_type_b || "?"}`; }, 6);
+    UI.text("finding-risk", data?.risk_level || "unknown");
+    UI.text("finding-summary", data?.finding_summary || "No finding summary available.");
 
-    const recovered = data?.recovered_keys || [];
-    UI.text("recovered-keys-count", recovered.length); UI.visible("recovered-keys-card", recovered.length > 0);
-    renderRows("recovered-keys-body", recovered, (row, item) => { row.insertCell().textContent = item.private_key_hex || ""; row.insertCell().textContent = `${item.wif_compressed || ""}\n${item.wif_uncompressed || ""}`; row.insertCell().textContent = `${item.address_compressed || ""}\n${item.address_uncompressed || ""}`; row.insertCell().textContent = item.recovered_via || "unknown"; }, 4);
+    renderRows("result-sigs-by-type", Object.entries(data?.signatures_by_type || {}).sort((a, b) => b[1] - a[1]), (row, [key, value]) => { row.insertCell().textContent = key; row.insertCell().textContent = value; }, 2);
+    renderRows("reused-groups-body", (data?.reused_r_groups || []).slice(0, 100), (row, item) => { row.insertCell().textContent = shortHex(item.r); row.insertCell().textContent = item.occurrences ?? "-"; row.insertCell().textContent = item.unique_txs ?? "-"; row.insertCell().textContent = (item.tx_sample || []).join(", "); }, 4);
+    renderRows("cross-tx-body", (data?.cross_tx_reused_r || []).slice(0, 200), (row, item) => { row.insertCell().textContent = shortHex(item.r); row.insertCell().textContent = item.tx_a || ""; row.insertCell().textContent = item.vin_a ?? "-"; row.insertCell().textContent = item.tx_b || ""; row.insertCell().textContent = item.vin_b ?? "-"; row.insertCell().textContent = `${item.script_type_a || "?"} / ${item.script_type_b || "?"}`; }, 6);
+    renderRows("in-tx-body", (data?.in_tx_reused_r || []).slice(0, 200), (row, item) => { row.insertCell().textContent = shortHex(item.r); row.insertCell().textContent = item.txid || ""; row.insertCell().textContent = `${item.vin_a ?? "-"} / ${item.vin_b ?? "-"}`; row.insertCell().textContent = `${item.script_type_a || "?"} / ${item.script_type_b || "?"}`; }, 4);
+    renderRows("bias-body", (data?.biased_nonce_candidates || []).slice(0, 200), (row, item) => { row.insertCell().textContent = item.txid || ""; row.insertCell().textContent = item.input_index ?? "-"; row.insertCell().textContent = item.k_bits ?? "-"; row.insertCell().textContent = shortHex(item.k); }, 4);
+
+    // The safe address-scan endpoint intentionally strips private-key material.
+    UI.text("recovered-keys-count", data?.recovered_key_count ?? 0);
+    UI.visible("recovered-keys-card", false);
 }
 
 function renderRows(targetId, items, renderer, colspan) {
@@ -140,6 +149,17 @@ window.addEventListener("DOMContentLoaded", () => {
     UI.get("scan-recent-btn")?.addEventListener("click", () => runLiveScan("recent"));
     UI.get("monitor-mempool-btn")?.addEventListener("click", () => runLiveScan("mempool"));
     if (UI.get("known-addresses")) loadKnownAddresses();
-    const txId = new URLSearchParams(window.location.search).get("tx");
-    if (txId && UI.get("tx-analysis-form") && UI.get("tx-id")) { UI.get("tx-id").value = txId; setTimeout(() => UI.get("tx-analysis-form").dispatchEvent(new Event("submit")), 100); }
+
+    const params = new URLSearchParams(window.location.search);
+    const txId = params.get("tx");
+    if (txId && UI.get("tx-analysis-form") && UI.get("tx-id")) {
+        UI.get("tx-id").value = txId;
+        setTimeout(() => UI.get("tx-analysis-form").dispatchEvent(new Event("submit")), 100);
+    }
+
+    const address = params.get("addr");
+    if (address && UI.get("address-analysis-form") && UI.get("btc-address")) {
+        UI.get("btc-address").value = address;
+        setTimeout(() => UI.get("address-analysis-form").dispatchEvent(new Event("submit")), 100);
+    }
 });
