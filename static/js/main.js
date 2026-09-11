@@ -1,839 +1,271 @@
-// Function to load known addresses from the API
-function loadKnownAddresses() {
-    const tbody = document.getElementById('known-addresses')?.querySelector('tbody');
-    if (!tbody) return;
+"use strict";
 
-    // Clear existing rows
-    tbody.innerHTML = '';
+// Shared UI controller. All backend calls are delegated to api-client.js.
 
-    // Add loading indicator
-    const loadingRow = document.createElement('tr');
-    loadingRow.innerHTML = `<td colspan="3" class="text-center">Loading addresses...</td>`;
-    tbody.appendChild(loadingRow);
-
-    // Fetch addresses from API
-    fetch('/api/addresses/known')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Failed to fetch addresses (${response.status})`);
-            }
-            return response.json();
-        })
-        .then(addresses => {
-            // Clear loading indicator
-            tbody.innerHTML = '';
-
-            if (Array.isArray(addresses) && addresses.length > 0) {
-                addresses.forEach(address => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td class="text-monospace">${address}</td>
-                        <td><span class="badge bg-warning">Potentially Vulnerable</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-primary" 
-                                    onclick="window.location.href='/address?addr=${address}'">
-                                Analyze
-                            </button>
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            } else {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td colspan="3" class="text-center">No addresses found</td>`;
-                tbody.appendChild(row);
-            }
-        })
-        .catch(error => {
-            console.error('Failed to load known addresses:', error);
-            tbody.innerHTML = '';
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td colspan="3" class="text-center text-danger">
-                    Error loading addresses: ${error.message}
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-}
-
-// Main application logic
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing application...');
-    // Initialize Bitcoin curve
-    if (typeof secp256k1 === 'function') {
-        window.B = secp256k1();
-        console.log('Bitcoin curve initialized');
-    }
-
-    // Initialize forms (each helper is a no-op if its target isn't on the page)
+document.addEventListener("DOMContentLoaded", () => {
     initTransactionForm();
     initAddressForm();
     initLiveScanning();
     initTransactionAnalysis();
-
-    if (document.getElementById('known-addresses')) {
-        loadKnownAddresses();
-    }
+    if (document.getElementById("known-addresses")) loadKnownAddresses();
 });
 
-function displayECDSAParameters(data, sig) {
-    try {
-        // Display curve parameters
-        document.getElementById('param-p').textContent = B.ec.field.p.toString(16);
-        document.getElementById('param-gx').textContent = B.G.x.uint().toString(16);
-        document.getElementById('param-gy').textContent = B.G.y.uint().toString(16);
-        document.getElementById('param-n').textContent = B.ec.order.p.toString(16);
+const $ = (id) => document.getElementById(id);
+const setText = (id, value) => { const el = $(id); if (el) el.textContent = value ?? ""; };
+const toggle = (id, visible) => { const el = $(id); if (el) el.classList.toggle("d-none", !visible); };
 
-        // Display transaction values if signature is available
-        if (sig) {
-            document.getElementById('param-m').textContent = sig.message;
-            if (sig.px && sig.py) {
-                document.getElementById('param-px').textContent = sig.px;
-                document.getElementById('param-py').textContent = sig.py;
-            }
-        }
-    } catch (error) {
-        console.error('Error displaying ECDSA parameters:', error);
-    }
-}
-
-function analyzeSignature(sig) {
-    try {
-        const r = BigInt('0x' + sig.r);
-        const s = BigInt('0x' + sig.s);
-        const m = BigInt('0x' + sig.message);
-
-        // Check for weak signatures
-        const weaknesses = [];
-
-        // Check if s is in lower half of curve order
-        if (s < (B.ec.order.p / 2n)) {
-            weaknesses.push({
-                type: 'low_s',
-                details: 'Signature uses low S value',
-                r: sig.r,
-                s: sig.s
-            });
-        }
-
-        return weaknesses;
-    } catch (error) {
-        console.error('Error analyzing signature:', error);
-        return [];
-    }
-}
+function showLoading(type) { toggle(`${type}-loading`, true); }
+function hideLoading(type) { toggle(`${type}-loading`, false); }
+function showError(type, message) { setText(`${type}-error`, message); toggle(`${type}-error`, true); }
+function hideError(type) { toggle(`${type}-error`, false); }
 
 function initTransactionForm() {
-    const form = document.getElementById('tx-analysis-form');
-    if (!form) {
-        console.error('Transaction form not found');
-        return;
-    }
-
-    console.log('Transaction form initialized');
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const txId = document.getElementById('tx-id').value.trim();
-        console.log('Analyzing transaction:', txId);
-
-        if (!validateTransactionId(txId)) {
-            showError('analysis', 'Invalid transaction ID format');
-            return false;
+    $("tx-analysis-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const txId = $("tx-id")?.value.trim();
+        if (!txId || (typeof validateTransactionId === "function" && !validateTransactionId(txId))) {
+            showError("analysis", "Invalid transaction ID format");
+            return;
         }
-
-        try {
-            await analyzeTransaction(txId);
-        } catch (error) {
-            console.error('Transaction analysis failed:', error);
-            showError('analysis', 'Analysis failed: ' + error.message);
-        }
-        return false;
+        await analyzeTransaction(txId);
     });
 }
 
 function initAddressForm() {
-    const form = document.getElementById('address-analysis-form');
-    if (!form) {
-        console.log('Address form not found on this page');
-        return;
-    }
-
-    console.log('Address form initialized');
-    form.addEventListener('submit', async function(e) {
-        e.preventDefault();
-
-        const address = document.getElementById('btc-address').value;
-        console.log('Analyzing address:', address);
-
-        if (!validateBitcoinAddress(address)) {
-            showError('address', 'Invalid Bitcoin address format');
+    $("address-analysis-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const address = $("btc-address")?.value.trim();
+        if (!address || (typeof validateBitcoinAddress === "function" && !validateBitcoinAddress(address))) {
+            showError("address", "Invalid Bitcoin address format");
             return;
         }
-
         await analyzeAddress(address);
     });
 }
 
 async function analyzeTransaction(txId) {
-    console.log('Starting transaction analysis...', txId);
-    showLoading('analysis');
-    hideError('analysis');
-
+    showLoading("analysis");
+    hideError("analysis");
     try {
-        console.log('Sending transaction analysis request:', txId);
-        const response = await fetch('/api/analyze/transaction', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ tx_id: txId })
-        });
-
-        const data = await response.json();
-        console.log('Transaction analysis response:', data);
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to analyze transaction');
-        }
-
+        const data = await window.apiClient.analyzeTransaction(txId);
         displayTransactionResults(data);
     } catch (error) {
-        console.error('Transaction analysis error:', error);
-        showError('analysis', error.message);
+        showError("analysis", error.message || "Transaction analysis failed");
     } finally {
-        hideLoading('analysis');
+        hideLoading("analysis");
     }
 }
 
 async function analyzeAddress(address) {
-    showLoading('address');
-    hideError('address');
-
-    const maxTxsEl = document.getElementById('btc-max-txs');
-    const maxTxs = maxTxsEl ? parseInt(maxTxsEl.value, 10) || 500 : 500;
-
+    showLoading("address");
+    hideError("address");
+    const maxTxs = Math.max(1, Math.min(parseInt($("btc-max-txs")?.value || "500", 10) || 500, 5000));
     try {
-        console.log('Sending address analysis request:', address, 'max_txs=', maxTxs);
-        const response = await fetch('/api/analyze/address', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: address, max_txs: maxTxs })
-        });
-
-        const data = await response.json();
-        console.log('Address analysis response:', data);
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to analyze address');
-        }
-
+        const data = await window.apiClient.analyzeAddress(address, maxTxs);
         displayAddressResults(data);
     } catch (error) {
-        console.error('Address analysis error:', error);
-        showError('address', error.message);
+        showError("address", error.message || "Address analysis failed");
     } finally {
-        hideLoading('address');
+        hideLoading("address");
     }
 }
 
 function displayTransactionResults(data) {
-    console.log('Displaying transaction results:', data);
+    toggle("analysis-results", true);
+    setText("result-txid", data?.tx_id || "N/A");
+    setText("result-sigs", data?.signatures_analyzed ?? 0);
+    setText("result-weak", Array.isArray(data?.weak_signatures) ? data.weak_signatures.length : 0);
+    setText("result-keys", data?.private_keys_found ?? 0);
 
-    const results = document.getElementById('analysis-results');
-    if (!results) {
-        console.error('Results container not found');
+    const table = $("weak-sigs-table");
+    if (!table) return;
+    table.replaceChildren();
+    const weaknesses = Array.isArray(data?.weak_signatures) ? data.weak_signatures : [];
+    if (!weaknesses.length) {
+        const row = table.insertRow();
+        row.insertCell().colSpan = 3;
+        row.cells[0].textContent = "No weak signatures found";
+        row.cells[0].className = "text-center";
         return;
     }
-
-    results.classList.remove('d-none');
-
-    // Display ECDSA parameters
-    if (data?.signatures?.[0]) {
-        displayECDSAParameters(data, data.signatures[0]);
-    }
-
-    // Display analysis results
-    document.getElementById('result-txid').textContent = data?.tx_id || 'N/A';
-    document.getElementById('result-sigs').textContent = data?.signatures_analyzed || 0;
-    document.getElementById('result-weak').textContent = (data?.weak_signatures || []).length;
-    document.getElementById('result-keys').textContent = data?.private_keys_found || 0;
-
-    const tableBody = document.getElementById('weak-sigs-table');
-    if (!tableBody) {
-        console.error('Weak signatures table not found');
-        return;
-    }
-
-    tableBody.innerHTML = '';
-
-    if (data?.weak_signatures?.length > 0) {
-        data.weak_signatures.forEach(sig => {
-            const row = document.createElement('tr');
-            const isPrivateKey = sig.type === 'recovered_key';
-
-            row.innerHTML = `
-                <td><span class="badge bg-danger">${sig?.type || 'Unknown'}</span></td>
-                <td class="text-monospace">${sig?.details || 'N/A'}</td>
-                <td>
-                    ${isPrivateKey ? `
-                        <button class="btn btn-sm btn-warning" onclick="showPrivateKey('${sig.private_key}')">
-                            <i class="fas fa-key"></i> View Key
-                        </button>
-                    ` : `
-                        <button class="btn btn-sm btn-info" onclick="showSignatureDetails('${sig?.r || ''}', '${sig?.type || ''}', ${JSON.stringify(sig).replace(/"/g, '&quot;')})">
-                            <i class="fas fa-info-circle"></i> Details
-                        </button>
-                    `}
-                </td>
-            `;
-            tableBody.appendChild(row);
-        });
-
-        // Show recovered keys section if there are any
-        const recoveredKeys = data.weak_signatures.filter(sig => sig.type === 'recovered_key');
-        const keysSection = document.getElementById('recovered-keys');
-        const keysTable = document.getElementById('private-keys-table');
-
-        if (recoveredKeys.length > 0) {
-            keysSection.classList.remove('d-none');
-            keysTable.innerHTML = '';
-
-            recoveredKeys.forEach(key => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="text-monospace">${key.private_key}</td>
-                    <td class="text-monospace">${key.k || 'N/A'}</td>
-                    <td>Hex Format (32 bytes)</td>
-                `;
-                keysTable.appendChild(row);
-            });
-        } else {
-            keysSection.classList.add('d-none');
+    for (const sig of weaknesses) {
+        const row = table.insertRow();
+        row.insertCell().textContent = sig?.type || "Unknown";
+        row.insertCell().textContent = sig?.details || "N/A";
+        const action = row.insertCell();
+        if (sig?.private_key) {
+            const button = document.createElement("button");
+            button.className = "btn btn-sm btn-warning";
+            button.textContent = "View Key";
+            button.addEventListener("click", () => showPrivateKey(sig.private_key));
+            action.appendChild(button);
         }
-    } else {
-        const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="3" class="text-center">No weak signatures found</td>';
-        tableBody.appendChild(row);
     }
 }
 
 function displayAddressResults(data) {
-    console.log('Displaying address results:', data);
+    toggle("address-results", true);
+    setText("result-address", data?.address || "N/A");
+    setText("result-total-txs", data?.total_tx_count ?? 0);
+    setText("result-txs-analyzed", data?.transactions_analyzed ?? 0);
+    setText("result-sigs-total", data?.signatures_total ?? 0);
+    setText("result-low-s", data?.low_s_count ?? 0);
+    setText("result-schnorr", data?.schnorr_count ?? 0);
+    setText("result-z-na", data?.z_unavailable ?? 0);
+    setText("result-elapsed", data?.elapsed_s ? `${Number(data.elapsed_s).toFixed(1)} s` : "-");
 
-    const results = document.getElementById('address-results');
-    if (!results) {
-        console.error('Results container not found');
+    renderRows("result-sigs-by-type", Object.entries(data?.signatures_by_type || {}).sort((a, b) => b[1] - a[1]), (row, entry) => {
+        row.insertCell().textContent = entry[0];
+        row.insertCell().textContent = entry[1];
+    }, 2);
+    renderRows("reused-groups-body", (data?.reused_r_groups || []).slice(0, 100), (row, item) => {
+        row.insertCell().textContent = shortHex(item.r);
+        row.insertCell().textContent = item.occurrences ?? "-";
+        row.insertCell().textContent = item.unique_txs ?? "-";
+        row.insertCell().textContent = item.tx_sample?.[0] || "";
+    }, 4);
+    renderRows("cross-tx-body", (data?.cross_tx_reused_r || []).slice(0, 200), (row, item) => {
+        row.insertCell().textContent = shortHex(item.r);
+        row.insertCell().textContent = item.tx_a || "";
+        row.insertCell().textContent = item.vin_a ?? "-";
+        row.insertCell().textContent = item.tx_b || "";
+        row.insertCell().textContent = item.vin_b ?? "-";
+        row.insertCell().textContent = `${item.script_type_a || "?"} / ${item.script_type_b || "?"}`;
+    }, 6);
+
+    const recovered = data?.recovered_keys || [];
+    setText("recovered-keys-count", recovered.length);
+    toggle("recovered-keys-card", recovered.length > 0);
+    renderRows("recovered-keys-body", recovered, (row, item) => {
+        row.insertCell().textContent = item.private_key_hex || "";
+        row.insertCell().textContent = `${item.wif_compressed || ""}\n${item.wif_uncompressed || ""}`;
+        row.insertCell().textContent = `${item.address_compressed || ""}\n${item.address_uncompressed || ""}`;
+        row.insertCell().textContent = item.recovered_via || "unknown";
+    }, 4);
+}
+
+function renderRows(targetId, items, renderer, emptyColspan = 1) {
+    const target = $(targetId);
+    if (!target) return;
+    const tbody = target.tagName === "TBODY" ? target : target;
+    tbody.replaceChildren();
+    if (!items.length) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = emptyColspan;
+        cell.className = "text-muted";
+        cell.textContent = "none";
         return;
     }
-    results.classList.remove('d-none');
-
-    // Aggregate facts
-    setText('result-address', data?.address || 'N/A');
-    setText('result-total-txs', data?.total_tx_count ?? 0);
-    setText('result-txs-analyzed', data?.transactions_analyzed ?? 0);
-    setText('result-sigs-total', data?.signatures_total ?? 0);
-    setText('result-low-s', data?.low_s_count ?? 0);
-    setText('result-schnorr', data?.schnorr_count ?? 0);
-    setText('result-z-na', data?.z_unavailable ?? 0);
-    setText('result-elapsed', data?.elapsed_s ? `${(+data.elapsed_s).toFixed(1)} s` : '-');
-
-    const sigsByType = data?.signatures_by_type || {};
-    const tBody = document.querySelector('#result-sigs-by-type tbody');
-    if (tBody) {
-        tBody.innerHTML = '';
-        const entries = Object.entries(sigsByType).sort((a, b) => b[1] - a[1]);
-        if (entries.length === 0) {
-            tBody.innerHTML = '<tr><td colspan="2" class="text-muted">no signatures parsed</td></tr>';
-        } else {
-            for (const [k, v] of entries) {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td class="text-monospace">${escapeHtml(k)}</td><td class="text-end">${v}</td>`;
-                tBody.appendChild(row);
-            }
-        }
-    }
-
-    // Recovered keys
-    const rKeys = data?.recovered_keys || [];
-    setText('recovered-keys-count', rKeys.length);
-    const rkCard = document.getElementById('recovered-keys-card');
-    if (rkCard) rkCard.classList.toggle('d-none', rKeys.length === 0);
-    const rkBody = document.getElementById('recovered-keys-body');
-    if (rkBody) {
-        rkBody.innerHTML = '';
-        for (const k of rKeys) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="text-monospace small">${escapeHtml(k.private_key_hex || '')}</td>
-                <td class="text-monospace small">${escapeHtml(k.wif_compressed || '')}<br/>${escapeHtml(k.wif_uncompressed || '')}</td>
-                <td class="text-monospace small">${escapeHtml(k.address_compressed || '')}<br/>${escapeHtml(k.address_uncompressed || '')}</td>
-                <td><span class="badge bg-warning text-dark">${escapeHtml(k.recovered_via || 'unknown')}</span></td>
-            `;
-            rkBody.appendChild(row);
-        }
-    }
-
-    // Reused-r groups (deduped view)
-    const groups = data?.reused_r_groups || [];
-    setText('reused-groups-count', groups.length);
-    const grBody = document.getElementById('reused-groups-body');
-    if (grBody) {
-        grBody.innerHTML = '';
-        for (const g of groups.slice(0, 100)) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="text-monospace small">${shortHex(g.r)}</td>
-                <td>${g.occurrences ?? '-'}</td>
-                <td>${g.unique_txs ?? '-'}</td>
-                <td class="text-monospace small">${(g.tx_sample || []).slice(0, 1).map(escapeHtml).join('')}</td>
-            `;
-            grBody.appendChild(row);
-        }
-        if (groups.length === 0) {
-            grBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
-        }
-    }
-
-    // Cross-tx reused-r
-    const crossTx = data?.cross_tx_reused_r || [];
-    setText('cross-tx-count', crossTx.length);
-    const ctxBody = document.getElementById('cross-tx-body');
-    if (ctxBody) {
-        ctxBody.innerHTML = '';
-        const slice = crossTx.slice(0, 200);
-        for (const p of slice) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="text-monospace small">${shortHex(p.r)}</td>
-                <td class="text-monospace small">${escapeHtml(p.tx_a || '')}</td>
-                <td>${p.vin_a ?? '-'}</td>
-                <td class="text-monospace small">${escapeHtml(p.tx_b || '')}</td>
-                <td>${p.vin_b ?? '-'}</td>
-                <td>${escapeHtml(p.script_type_a || '?')} / ${escapeHtml(p.script_type_b || '?')}</td>
-            `;
-            ctxBody.appendChild(row);
-        }
-        if (crossTx.length > 200) {
-            const row = document.createElement('tr');
-            row.innerHTML = `<td colspan="6" class="text-muted">... and ${crossTx.length - 200} more cross-tx pairs</td>`;
-            ctxBody.appendChild(row);
-        }
-        if (crossTx.length === 0) {
-            ctxBody.innerHTML = '<tr><td colspan="6" class="text-muted">none</td></tr>';
-        }
-    }
-
-    // In-tx reused-r
-    const inTx = data?.in_tx_reused_r || [];
-    setText('in-tx-count', inTx.length);
-    const itxBody = document.getElementById('in-tx-body');
-    if (itxBody) {
-        itxBody.innerHTML = '';
-        for (const p of inTx) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="text-monospace small">${shortHex(p.r)}</td>
-                <td class="text-monospace small">${escapeHtml(p.txid || '')}</td>
-                <td>${p.vin_a ?? '-'} / ${p.vin_b ?? '-'}</td>
-                <td>${escapeHtml(p.script_type_a || '?')} / ${escapeHtml(p.script_type_b || '?')}</td>
-            `;
-            itxBody.appendChild(row);
-        }
-        if (inTx.length === 0) {
-            itxBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
-        }
-    }
-
-    // Biased-nonce candidates
-    const bias = data?.biased_nonce_candidates || [];
-    setText('bias-count', bias.length);
-    const biasBody = document.getElementById('bias-body');
-    if (biasBody) {
-        biasBody.innerHTML = '';
-        for (const c of bias.slice(0, 200)) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="text-monospace small">${escapeHtml(c.txid || '')}</td>
-                <td>${c.vin ?? '-'}</td>
-                <td>${c.k_bit_length ?? '-'}</td>
-                <td class="text-monospace small">${escapeHtml(c.k_hex || '')}</td>
-            `;
-            biasBody.appendChild(row);
-        }
-        if (bias.length === 0) {
-            biasBody.innerHTML = '<tr><td colspan="4" class="text-muted">none</td></tr>';
-        }
-    }
-
-    // Notes
-    const notes = data?.notes || [];
-    const notesCard = document.getElementById('notes-card');
-    const notesBody = document.getElementById('notes-body');
-    if (notesCard) notesCard.classList.toggle('d-none', notes.length === 0);
-    if (notesBody) {
-        notesBody.innerHTML = '';
-        for (const n of notes) {
-            const li = document.createElement('li');
-            li.className = 'text-monospace small';
-            li.textContent = n;
-            notesBody.appendChild(li);
-        }
-    }
+    for (const item of items) renderer(tbody.insertRow(), item);
 }
 
-function setText(id, v) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = String(v);
-}
-
-function escapeHtml(s) {
-    if (s == null) return '';
-    return String(s)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
-
-function shortHex(n) {
-    if (n == null) return '-';
-    let s;
-    if (typeof n === 'string') {
-        s = n;
-    } else {
-        // big-int or number
-        try { s = '0x' + BigInt(n).toString(16); }
-        catch (_) { s = String(n); }
-    }
-    if (s.length > 18) return s.slice(0, 10) + '...' + s.slice(-6);
-    return s;
-}
-
-function showLoading(type) {
-    const element = document.getElementById(`${type}-loading`);
-    if (element) {
-        element.classList.remove('d-none');
-    }
-}
-
-function hideLoading(type) {
-    const element = document.getElementById(`${type}-loading`);
-    if (element) {
-        element.classList.add('d-none');
-    }
-}
-
-function showError(type, message) {
-    const error = document.getElementById(`${type}-error`);
-    if (error) {
-        error.textContent = message;
-        error.classList.remove('d-none');
-    }
-}
-
-function hideError(type) {
-    const error = document.getElementById(`${type}-error`);
-    if (error) {
-        error.classList.add('d-none');
-    }
-}
-
-function showPrivateKey(key) {
-    if (confirm('Warning: You are about to view a private key. Make sure no one else can see your screen. Continue?')) {
-        alert(`Private Key (hex):\n${key}\n\nWarning: Store this securely and never share it with anyone.`);
-    }
-}
-
-function showSignatureDetails(r, type, sigData) {
+async function loadKnownAddresses() {
+    const table = $("known-addresses");
+    const tbody = table?.querySelector("tbody");
+    if (!tbody) return;
+    tbody.replaceChildren();
     try {
-        const sig = typeof sigData === 'string' ? JSON.parse(sigData.replace(/&quot;/g, '"')) : sigData;
-
-        let detailsHTML = `
-            <div class="modal fade" id="signatureModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Signature Vulnerability Details</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <h6 class="text-danger">Vulnerability Type: ${type.toUpperCase()}</h6>
-                            <hr>
-
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Signature Components:</h6>
-                                    <p><strong>r value:</strong><br><code class="text-break">${sig.r || 'N/A'}</code></p>
-                                    <p><strong>s value:</strong><br><code class="text-break">${sig.s || 'N/A'}</code></p>
-                                    <p><strong>Message Hash:</strong><br><code class="text-break">${sig.message || 'N/A'}</code></p>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Analysis Details:</h6>
-                                    <p><strong>Issue:</strong> ${sig.details || 'N/A'}</p>
-                                    ${sig.tx_id ? `<p><strong>Transaction:</strong><br><code>${sig.tx_id}</code></p>` : ''}
-                                    ${sig.private_key ? `<p><strong>Recovered Key:</strong><br><code class="text-success">${sig.private_key}</code></p>` : ''}
-                                </div>
-                            </div>
-
-                            ${type === 'reused_r' ? `
-                                <hr>
-                                <div class="alert alert-warning">
-                                    <h6><i class="fas fa-exclamation-triangle"></i> Nonce Reuse Vulnerability</h6>
-                                    <p>This signature reuses the same r value (nonce) as ${sig.reuse_count || 'multiple'} other signatures. This allows private key recovery using the formula:</p>
-                                    <p><strong>k = (z₁ - z₂) / (s₁ - s₂) mod n</strong></p>
-                                    <p><strong>x = (s × k - z) / r mod n</strong></p>
-                                    <p>Where k is the nonce and x is the private key.</p>
-                                    ${sig.all_signatures && sig.all_signatures.length > 1 ? `
-                                        <hr>
-                                        <h6>All Signatures with this R value:</h6>
-                                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                                            <table class="table table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>S Value</th>
-                                                        <th>Message Hash</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    ${sig.all_signatures.map(s => `
-                                                        <tr>
-                                                            <td><code class="small">${s.s?.substring(0, 16)}...</code></td>
-                                                            <td><code class="small">${s.message?.substring(0, 16)}...</code></td>
-                                                        </tr>
-                                                    `).join('')}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            ` : ''}
-
-                            ${type === 'low_s' ? `
-                                <hr>
-                                <div class="alert alert-info">
-                                    <h6><i class="fas fa-info-circle"></i> Low S Value</h6>
-                                    <p>This signature uses a low s value, which is a good security practice but can indicate implementation patterns.</p>
-                                </div>
-                            ` : ''}
-
-                            <hr>
-                            <h6>ECDSA Parameters:</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <p><strong>Curve:</strong> secp256k1</p>
-                                    <p><strong>Prime (p):</strong><br><code class="small">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F</code></p>
-                                    <p><strong>Order (n):</strong><br><code class="small">FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141</code></p>
-                                </div>
-                                <div class="col-md-6">
-                                    <p><strong>Generator Point G:</strong></p>
-                                    <p><strong>Gx:</strong><br><code class="small">79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798</code></p>
-                                    <p><strong>Gy:</strong><br><code class="small">483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8</code></p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            ${sig.private_key ? `
-                                <button type="button" class="btn btn-warning" onclick="copyToClipboard('${sig.private_key}')">
-                                    <i class="fas fa-copy"></i> Copy Private Key
-                                </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Remove existing modal if present
-        const existingModal = document.getElementById('signatureModal');
-        if (existingModal) {
-            existingModal.remove();
+        const addresses = await window.apiClient.knownAddresses();
+        for (const address of Array.isArray(addresses) ? addresses : []) {
+            const row = tbody.insertRow();
+            row.insertCell().textContent = address;
+            row.insertCell().textContent = "Potentially Vulnerable";
+            const action = row.insertCell();
+            const button = document.createElement("button");
+            button.className = "btn btn-sm btn-primary";
+            button.textContent = "Analyze";
+            button.addEventListener("click", () => { window.location.href = `/address?addr=${encodeURIComponent(address)}`; });
+            action.appendChild(button);
         }
-
-        // Add modal to body
-        document.body.insertAdjacentHTML('beforeend', detailsHTML);
-
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('signatureModal'));
-        modal.show();
-
+        if (!addresses?.length) {
+            const row = tbody.insertRow();
+            row.insertCell().colSpan = 3;
+            row.cells[0].textContent = "No addresses found";
+        }
     } catch (error) {
-        console.error('Error showing signature details:', error);
-        alert('Error displaying signature details. Check console for more information.');
+        const row = tbody.insertRow();
+        row.insertCell().colSpan = 3;
+        row.cells[0].textContent = `Error loading addresses: ${error.message}`;
     }
-}
-
-function copyToClipboard(text) {
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => {
-            alert('Private key copied to clipboard!');
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-            fallbackCopyTextToClipboard(text);
-        });
-    } else {
-        fallbackCopyTextToClipboard(text);
-    }
-}
-
-function fallbackCopyTextToClipboard(text) {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-
-    try {
-        document.execCommand('copy');
-        alert('Private key copied to clipboard!');
-    } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
-        alert('Failed to copy to clipboard. Please copy manually.');
-    }
-
-    document.body.removeChild(textArea);
 }
 
 function initLiveScanning() {
-    const scanRecentBtn = document.getElementById('scan-recent-btn');
-    const monitorMempoolBtn = document.getElementById('monitor-mempool-btn');
+    $("scan-recent-btn")?.addEventListener("click", () => runLiveScan("recent"));
+    $("monitor-mempool-btn")?.addEventListener("click", () => runLiveScan("mempool"));
+}
 
-    if (scanRecentBtn) {
-        scanRecentBtn.addEventListener('click', scanRecentBlocks);
+async function runLiveScan(type) {
+    toggle("live-scan-loading", true);
+    toggle("live-scan-results", false);
+    toggle("scan-recent-btn", false);
+    toggle("monitor-mempool-btn", false);
+    try {
+        const data = type === "recent" ? await window.apiClient.autoScan() : await window.apiClient.monitorMempool();
+        displayLiveScanResults(data, type);
+    } catch (error) {
+        displayLiveScanResults({ success: false, error: error.message }, type);
+    } finally {
+        toggle("live-scan-loading", false);
+        const recent = $("scan-recent-btn");
+        const mempool = $("monitor-mempool-btn");
+        if (recent) recent.disabled = false;
+        if (mempool) mempool.disabled = false;
     }
+}
 
-    if (monitorMempoolBtn) {
-        monitorMempoolBtn.addEventListener('click', monitorMempool);
+function displayLiveScanResults(data, type) {
+    toggle("live-scan-results", true);
+    const summary = $("scan-summary");
+    const results = $("vulnerable-transactions");
+    if (!summary || !results) return;
+    results.replaceChildren();
+    if (!data?.success) {
+        summary.className = "alert alert-danger";
+        summary.textContent = data?.error || "Scan failed";
+        return;
     }
-}
-
-function showLiveScanLoading() {
-    document.getElementById('live-scan-loading').classList.remove('d-none');
-    document.getElementById('live-scan-results').classList.add('d-none');
-    document.getElementById('scan-recent-btn').disabled = true;
-    document.getElementById('monitor-mempool-btn').disabled = true;
-}
-
-function hideLiveScanLoading() {
-    document.getElementById('live-scan-loading').classList.add('d-none');
-    document.getElementById('scan-recent-btn').disabled = false;
-    document.getElementById('monitor-mempool-btn').disabled = false;
-}
-
-function displayLiveScanResults(data, scanType) {
-    const summaryDiv = document.getElementById('scan-summary');
-    const resultsDiv = document.getElementById('vulnerable-transactions');
-
-    if (data.success) {
-        const scannedCount = scanType === 'recent' ? data.scanned_transactions : data.mempool_scanned;
-        const foundCount = scanType === 'recent' ? data.weak_signatures_found : data.vulnerable_transactions;
-
-        summaryDiv.innerHTML = `
-            <h6>Scan Complete</h6>
-            <p><strong>Transactions Scanned:</strong> ${scannedCount}</p>
-            <p><strong>Vulnerable Signatures Found:</strong> ${foundCount}</p>
-            ${scanType === 'recent' ? `<p><strong>Block Hash:</strong> <code>${data.block_hash || 'N/A'}</code></p>` : ''}
-        `;
-
-        if (foundCount > 0) {
-            summaryDiv.className = 'alert alert-warning';
-            resultsDiv.innerHTML = data.results.map(result => `
-                <div class="card mb-2">
-                    <div class="card-body">
-                        <h6 class="card-title">Transaction: <code>${result.tx_id}</code></h6>
-                        <p><strong>Private Keys Found:</strong> ${result.private_keys_found}</p>
-                        <p><strong>Weak Signatures:</strong> ${result.weak_signatures ? result.weak_signatures.length : 0}</p>
-                        ${scanType === 'mempool' ? `
-                            <p><strong>Fee:</strong> ${result.fee} satoshis</p>
-                            <p><strong>Size:</strong> ${result.size} bytes</p>
-                            <p><strong>Timestamp:</strong> ${new Date(result.timestamp * 1000).toLocaleString()}</p>
-                        ` : ''}
-                        <button class="btn btn-sm btn-primary" onclick="goToTransaction('${result.tx_id}')">
-                            <i class="fas fa-microscope"></i> Analyze Details
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        } else {
-            summaryDiv.className = 'alert alert-success';
-            resultsDiv.innerHTML = '<p class="text-muted">No vulnerable signatures found in scanned transactions.</p>';
-        }
-    } else {
-        summaryDiv.className = 'alert alert-danger';
-        summaryDiv.innerHTML = `<h6>Scan Failed</h6><p>Error: ${data.error}</p>`;
-        resultsDiv.innerHTML = '';
+    const scanned = type === "recent" ? data.scanned_transactions : data.mempool_scanned;
+    const found = type === "recent" ? data.weak_signatures_found : data.vulnerable_transactions;
+    summary.className = `alert ${found ? "alert-warning" : "alert-success"}`;
+    summary.textContent = `Scanned ${scanned ?? 0} transaction(s); ${found ?? 0} result(s).`;
+    for (const item of data.results || []) {
+        const card = document.createElement("div");
+        card.className = "card mb-2";
+        const body = document.createElement("div");
+        body.className = "card-body";
+        body.textContent = `Transaction: ${item.tx_id} | Findings: ${item.private_keys_found ?? 0}`;
+        const button = document.createElement("button");
+        button.className = "btn btn-sm btn-primary ms-2";
+        button.textContent = "Analyze Details";
+        button.addEventListener("click", () => goToTransaction(item.tx_id));
+        body.appendChild(button);
+        card.appendChild(body);
+        results.appendChild(card);
     }
-
-    document.getElementById('live-scan-results').classList.remove('d-none');
-}
-
-function scanRecentBlocks() {
-    showLiveScanLoading();
-
-    fetch('/api/auto-scan')
-        .then(response => response.json())
-        .then(data => {
-            hideLiveScanLoading();
-            displayLiveScanResults(data, 'recent');
-        })
-        .catch(error => {
-            console.error('Error scanning recent blocks:', error);
-            hideLiveScanLoading();
-            displayLiveScanResults({
-                success: false,
-                error: 'Failed to scan recent blocks: ' + error.message
-            }, 'recent');
-        });
-}
-
-function monitorMempool() {
-    showLiveScanLoading();
-
-    fetch('/api/monitor-mempool')
-        .then(response => response.json())
-        .then(data => {
-            hideLiveScanLoading();
-            displayLiveScanResults(data, 'mempool');
-        })
-        .catch(error => {
-            console.error('Error monitoring mempool:', error);
-            hideLiveScanLoading();
-            displayLiveScanResults({
-                success: false,
-                error: 'Failed to monitor mempool: ' + error.message
-            }, 'mempool');
-        });
 }
 
 function initTransactionAnalysis() {
-    // On the /transaction page, accept ?tx=<id> and auto-submit so links from
-    // other pages (e.g. live-scan results) prefill and run the analysis.
-    const txForm = document.getElementById('tx-analysis-form');
-    if (!txForm) {
-        return;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const txId = urlParams.get('tx');
-    if (txId) {
-        const txInput = document.getElementById('tx-id');
-        if (txInput) {
-            txInput.value = txId;
-            setTimeout(() => txForm.dispatchEvent(new Event('submit')), 500);
-        }
+    const form = $("tx-analysis-form");
+    if (!form) return;
+    const txId = new URLSearchParams(window.location.search).get("tx");
+    if (txId && $("tx-id")) {
+        $("tx-id").value = txId;
+        setTimeout(() => form.dispatchEvent(new Event("submit")), 100);
     }
 }
 
-// Helper used by buttons in scan-result cards to jump to the analysis page
-// for a specific transaction. Distinct from analyzeTransaction(txId), which
-// performs the actual API call on the /transaction page.
 function goToTransaction(txId) {
-    window.location.href = `/transaction?tx=${txId}`;
+    window.location.href = `/transaction?tx=${encodeURIComponent(txId)}`;
+}
+
+function showPrivateKey(key) {
+    if (confirm("Warning: you are about to view a private key. Continue?")) {
+        alert(`Private key (hex):\n${key}`);
+    }
+}
+
+function shortHex(value) {
+    const text = String(value ?? "-");
+    return text.length > 18 ? `${text.slice(0, 10)}...${text.slice(-6)}` : text;
 }
