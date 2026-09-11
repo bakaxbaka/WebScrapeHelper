@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block content %}
@@ -14,31 +13,25 @@
         <div class="card">
             <div class="card-body">
                 <h3>Offline Calculator</h3>
-                <p>This calculator allows you to perform various ECDSA cryptographic operations for Bitcoin:</p>
-                
+                <p>This calculator allows you to perform ECDSA operations locally for authorized testing and research.</p>
                 <ul>
-                    <li>Crack a private key using two signatures that reused the same nonce (k)</li>
-                    <li>Crack a private key using a known nonce (k)</li>
+                    <li>Analyze signatures with a reused nonce</li>
+                    <li>Calculate values from a known nonce</li>
                     <li>Calculate a public key from a private key</li>
-                    <li>Sign a message with a secret key</li>
-                    <li>Verify a message signature</li>
-                    <li>Find a public key from a signature</li>
-                    <li>Find the signing secret (k) used for a signature</li>
+                    <li>Sign and verify test messages</li>
+                    <li>Inspect public-key/signature relationships</li>
                 </ul>
-                
-                <p class="mt-4">You can use the calculator in two ways:</p>
-                
+                <p class="mt-4">Use the calculator in your browser:</p>
                 <div class="d-grid gap-2">
-                    <a href="{{ url_for('download_calculator') }}" class="btn btn-primary btn-lg">
+                    <a href="{{ url_for('pages.download_calculator') }}" class="btn btn-primary btn-lg">
                         <i class="fas fa-download"></i> Download Standalone HTML Calculator
                     </a>
-                    <a href="/static/ecdsa_standalone.html" target="_blank" class="btn btn-success btn-lg">
+                    <a href="{{ url_for('static', filename='ecdsa_standalone.html') }}" target="_blank" class="btn btn-success btn-lg">
                         <i class="fas fa-external-link-alt"></i> Open Calculator In New Tab
                     </a>
                 </div>
-                
                 <div class="alert alert-info mt-4">
-                    <i class="fas fa-info-circle"></i> The standalone calculator works completely in your browser with no server connections needed. All cryptographic operations are performed locally using JavaScript.
+                    <i class="fas fa-info-circle"></i> The standalone calculator performs its calculations locally in the browser and does not need the Flask API.
                 </div>
             </div>
         </div>
